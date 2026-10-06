@@ -6,7 +6,7 @@ import { shuffle } from './shuffle';
 import { buildWordSearch } from './wordsearch';
 
 export const BLANK = '_____';
-/** Puzzles stay a printable size: beyond this a seeded random subset is used ("New layout" picks another). */
+/** Puzzles stay a printable size: beyond this a seeded random subset is used (a new deal picks another). */
 export const CROSSWORD_MAX = 40;
 export const WORDSEARCH_MAX = 30;
 
@@ -86,7 +86,7 @@ function buildCross(pairs: Pair[], R: () => number): Built {
   const tries = Math.max(6, Math.min(40, Math.floor(3000 / chosen.length)));
   const cw = buildCrossword(chosen.map((p) => ({ id: String(p.n), word: p.clean, clue: p.q })), R, tries);
   if (cw.words.length < 2) {
-    return { ok: false, game: 'crossword', msg: 'These answers share no letters, so they cannot cross. Add more words or press New layout.' };
+    return { ok: false, game: 'crossword', msg: 'These answers share no letters, so they cannot cross. Add more words or press Rearrange.' };
   }
 
   const grid = Array.from({ length: cw.rows }, () => Array<string>(cw.cols).fill('#'));
@@ -107,7 +107,7 @@ function buildCross(pairs: Pair[], R: () => number): Built {
     across: entries.filter((e) => e.direction === 'across').sort(byNumber),
     down: entries.filter((e) => e.direction === 'down').sort(byNumber),
     placedCount: cw.words.length, total: pairs.length,
-    note: left.length ? `Left out (wrong length, repeated, or no shared letters): ${list(left)}. Try New layout, or add more words.` : '',
+    note: left.length ? `Left out (wrong length, repeated, or no shared letters): ${list(left)}. Try Rearrange, or add more words.` : '',
   };
 }
 

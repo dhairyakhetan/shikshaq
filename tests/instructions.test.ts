@@ -61,7 +61,9 @@ describe('the chatbot instructions agree with the code', () => {
     expect(html).toContain("Under '1. Add your questions', type the title into 'Game title' and paste the lines into 'Questions and answers'");
     expect(html).toContain("Under '2. Pick a game', choose " + GAMES.map((g) => g.name).slice(0, 3).join(', ') + ' or ' + GAMES[3].name);
     expect(html).toContain("Under '3. Check it, then download', pick a file type and press Download");
-    expect(dl).toContain('<b>Download</b>');
+    expect(html).toContain('Layout buttons'); // the tabs in step 3
+    expect(read('src/components/DownloadStep.tsx')).toContain('Layout {k + 1}');
+    expect(dl).toMatch(/<b>Download[^<]*<\/b>/); // the button reads "Download" or "Download layout 2"
     expect(read('src/components/Header.tsx')).toContain('#chatbots'); // the header link lands on the instructions
     expect(html).toContain('id="chatbots"');
   });
@@ -97,6 +99,61 @@ describe('the chatbot instructions agree with the code', () => {
     // numbering, bullets and a header line are NOT silently fixed by the site: the instructions forbid them
     expect(text).toContain('No header line, no numbering, no bullets');
     expect(parsePairs('1. Q | A').pairs[0].q).toBe('1. Q'); // so a chatbot that numbers its lines would pollute the questions
+  });
+});
+
+describe('the guidance on what good data looks like', () => {
+  it('has a recommended range for every game, at least as large as the game\'s minimum', () => {
+    for (const g of GAMES) {
+      // every table row for this game, each confined to its own <tr>
+      const rows = [...html.matchAll(new RegExp(`<tr><td>${g.name}</td>((?:(?!</tr>)[\\s\\S])*)</tr>`, 'g'))].map((m) => m[1]);
+      expect(rows, `rows for ${g.name}`).toHaveLength(2); // the rules table and the "what good looks like" table
+      const rec = rows.map((r) => r.match(/<td>(\d+) to (\d+)[^<]*<\/td>$/)).find(Boolean);
+      expect(rec, `recommendation for ${g.name}`).toBeTruthy();
+      const [lo, hi] = [Number(rec![1]), Number(rec![2])];
+      expect(lo, g.name).toBeGreaterThanOrEqual(g.need);
+      expect(hi, g.name).toBeGreaterThan(lo);
+    }
+  });
+
+  it('puts the priorities up front and separates material from a bare reference', () => {
+    expect(html.indexOf('<strong>Priorities.</strong>')).toBeGreaterThan(html.indexOf('id="what-you-must-do"'));
+    expect(html.indexOf('<strong>Priorities.</strong>')).toBeLessThan(html.indexOf('<h4>Step 1:'));
+    expect(text).toContain('Case A: the user gave study material');
+    expect(text).toContain('Case B: the user gave only a reference');
+    expect(text).toContain('follow it exactly'); // a named board, textbook or syllabus
+    expect(text).toContain('state it in your reply'); // never ask which curriculum: decide and say so
+    expect(text).toContain('which curriculum you assumed');
+  });
+
+  it('keeps "ask no other question" and the first question consistent with accepting a bare reference', () => {
+    expect(text).toContain('or tell me the subject, class and chapter');
+    expect(text).toContain('do not ask which curriculum, chapter or game they mean');
+  });
+
+  it("the 'bad' word-search example really is unusable in a word search", () => {
+    const bad = parsePairs("What is Avogadro's constant? | 6.022 x 10^23 per mole").pairs[0];
+    expect(GAMES.find((g) => g.id === 'wordSearch')!.fits(bad)).toBe(false);
+    expect(GAMES.find((g) => g.id === 'matching')!.fits(bad)).toBe(true); // valid data, poor word-search material
+  });
+
+  it('has a second worked example (a bare reference, one game) that is exactly the data a word search wants', () => {
+    const block = [...html.matchAll(/<pre><code>([\s\S]*?)<\/code><\/pre>/g)].map((m) => m[1]).find((b) => b.startsWith('Scientist who proposed the atomic theory'))!;
+    const { pairs, warns } = parsePairs(block);
+    expect(warns).toEqual([]);
+    expect(pairs.length).toBeGreaterThanOrEqual(10);
+    expect(pairs.length).toBeLessThanOrEqual(20);
+    const ws = GAMES.find((g) => g.id === 'wordSearch')!;
+    for (const p of pairs) {
+      expect(ws.fits(p), p.a).toBe(true);
+      expect(p.clean.length, p.a).toBeGreaterThanOrEqual(3); // "distinctive single words of 3 to 12 letters"
+      expect(p.clean.length, p.a).toBeLessThanOrEqual(12);
+      expect(p.a, p.a).toMatch(/^[A-Za-z]+$/); // single word, no digits or punctuation
+    }
+    const b = build('wordSearch', pairs, 1);
+    if (!b.ok || b.game !== 'wordSearch') throw new Error('word search should build');
+    expect(b.words).toHaveLength(pairs.length); // every word placed
+    expect(new Set(pairs.map((p) => p.clean)).size).toBe(pairs.length); // all different
   });
 });
 

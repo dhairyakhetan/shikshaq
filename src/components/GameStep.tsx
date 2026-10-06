@@ -1,8 +1,9 @@
+import type { ReactNode } from 'react';
 import { GAMES, usable } from '../lib/games';
 import type { GameId, Pair } from '../types';
 import { CheckIcon, GameIcon } from './icons';
 
-export function GameStep({ game, pairs, onPick }: { game: GameId; pairs: Pair[]; onPick: (g: GameId) => void }) {
+export function GameStep({ game, pairs, onPick, children }: { game: GameId; pairs: Pair[]; onPick: (g: GameId) => void; children?: ReactNode }) {
   return (
     <section id="game" aria-labelledby="h-game" className="step plain">
       <div className="step-head">
@@ -36,6 +37,7 @@ export function GameStep({ game, pairs, onPick }: { game: GameId; pairs: Pair[];
           );
         })}
       </div>
+      {children}
     </section>
   );
 }

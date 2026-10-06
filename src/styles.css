@@ -82,15 +82,30 @@ textarea.out { height: 220px; font-size: 13px; line-height: 1.5; border-width: 1
 .btn.grow { flex: 1 1 0; }
 
 .count { font-weight: 700; } .count.ok { color: var(--ok); } .count.wait { color: #9a5b00; }
-.table-wrap { border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: 352px; }
-.pairs { font-size: 16px; min-width: 460px; }
-.prow { display: grid; grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 96px; border-top: 1px solid #e6eaf1; }
-.prow > span { padding: 10px 12px; overflow-wrap: anywhere; }
-.prow.head { border-top: 0; background: var(--soft); font-weight: 700; position: sticky; top: 0; }
-.prow .n { color: var(--muted); } .prow .a { font-weight: 700; }
-.fits { display: flex; gap: 3px; align-items: center; }
+/* One row per pair: the question gets the full width (they are often whole sentences), the answer and the fit chips sit under it.
+   When the table itself is narrow, the number and chips share a line above. There is no column header to squeeze: it is kept for screen readers only. */
+.table-wrap { container-type: inline-size; border: 1px solid var(--line); border-radius: 12px; }
+.table-wrap.open { overflow: auto; max-height: 460px; }
+.pairs { font-size: 16px; }
+.prow { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) auto; grid-template-areas: 'n q q' '. a meta'; column-gap: 0; row-gap: 2px; align-items: baseline; padding: 12px 14px 12px 0; border-top: 1px solid #e6eaf1; }
+.prow:nth-child(2) { border-top: 0; }
+.prow > span { padding: 0; overflow-wrap: anywhere; }
+.prow .n { grid-area: n; text-align: right; padding-right: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.prow .q { grid-area: q; }
+.prow .a { grid-area: a; font-weight: 700; }
+.prow .fits { grid-area: meta; padding-left: 12px; }
+.prow.head { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.fits { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; justify-content: flex-end; }
 .fits abbr { text-decoration: none; width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font: 700 11px/1 var(--font); cursor: default; }
 .fits abbr.off { background: #f1f3f7; color: #a3adc0; }
+.lp { margin-right: 4px; padding: 4px 6px; border-radius: 6px; background: var(--ink); color: #fff; font: 700 11px/1 var(--font); }
+.more { align-self: flex-start; min-height: 44px; }
+@container (max-width: 420px) {
+  .prow { grid-template-columns: 1fr auto; grid-template-areas: 'n meta' 'q q' 'a a'; padding: 12px 14px; align-items: center; }
+  .prow .n { text-align: left; padding: 0; font-weight: 700; }
+  .prow .n::before { content: '#'; }
+  .prow .fits { padding-left: 0; }
+}
 .empty { margin: 0; padding: 28px 16px; text-align: center; color: var(--muted); }
 .warn { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 12px; padding: 12px 14px; color: var(--warn-ink); font-size: 15px; }
 .warn ul { margin: 6px 0 0; padding-left: 20px; }
@@ -106,6 +121,24 @@ textarea.out { height: 220px; font-size: 13px; line-height: 1.5; border-width: 1
 .gdesc { font-size: 16px; color: var(--muted); }
 .gfit { margin-top: auto; font-size: 14px; font-weight: 700; color: var(--c); }
 .gfit.short { color: #9a5b00; }
+
+/* layout options (step 2) */
+select { font: inherit; height: 48px; padding: 0 38px 0 14px; border: 2px solid var(--line-strong); border-radius: 12px; color: var(--ink); cursor: pointer; width: 100%;
+  appearance: none; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1.5l6 6 6-6' fill='none' stroke='%2313203a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 14px center; }
+select:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.opts { padding: 18px 22px; display: flex; flex-direction: column; gap: 12px; }
+.opts-row { display: flex; flex-wrap: wrap; gap: 14px 20px; align-items: flex-end; }
+.opt { display: flex; flex-direction: column; gap: 6px; flex: 1 1 200px; max-width: 280px; min-width: 0; }
+.opt label { font-size: 15px; }
+.opts-note { margin: 0; color: var(--muted); font-size: 15px; }
+
+/* layout tabs (step 3) */
+.tabs { --c: var(--ink); display: flex; flex-wrap: wrap; gap: 8px; }
+.tab { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 2px solid var(--line-strong); background: #fff; color: var(--ink); font-weight: 700; font-size: 16px; }
+.tab small { font-weight: 400; color: var(--muted); margin-left: 2px; }
+.tab:hover { border-color: var(--c); }
+.tab.on { background: var(--c); border-color: var(--c); color: #fff; }
+.tab.on small { color: #fff; opacity: .85; }
 
 /* step 3 */
 .wait { background: #fff; border: 2px dashed var(--line-strong); border-radius: 18px; padding: 40px 24px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }

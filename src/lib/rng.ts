@@ -1,4 +1,4 @@
-/** Small seeded generator, so "New layout" is repeatable and the preview always equals the file. */
+/** Small seeded generator, so "Rearrange" is repeatable and the preview always equals the file. */
 export function rng(seed: number): () => number {
   let a = (seed * 2654435761) >>> 0;
   return () => {

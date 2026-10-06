@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { build, BLANK, CROSSWORD_MAX, letter, type BuiltOk } from '../src/lib/build';
 import { LIMITS, usable } from '../src/lib/games';
-import { makeAllGames, makeOutput } from '../src/lib/output';
+import { fileName, makeOutput, zipName } from '../src/lib/output';
 import { MAX_ANSWER, MAX_QUESTION, parsePairs } from '../src/lib/parse';
 import { gridWord } from '../src/lib/text';
 import type { GameId } from '../src/types';
@@ -308,13 +308,26 @@ describe('files', () => {
     expect(JSON.parse(makeOutput(ok('matching', `${evil}\nQ2 | A2`), 'json', 'T')).pairs[0].question).toBe('<img src=x onerror=alert(1)>');
   });
 
-  it('"all games" holds every buildable game and explains the ones that are missing', () => {
-    const full = JSON.parse(makeAllGames(pairs(), 'Pack', 1));
-    expect(full.games.map((g: { gameType: string }) => g.gameType)).toEqual(['crossword', 'matching', 'fillBlank', 'wordSearch']);
-    expect(full.unavailable).toEqual([]);
-    const small = JSON.parse(makeAllGames(pairs('Only | One'), 'Pack', 1));
-    expect(small.games.map((g: { gameType: string }) => g.gameType)).toEqual(['fillBlank', 'wordSearch']);
-    expect(small.unavailable.map((u: { gameType: string }) => u.gameType)).toEqual(['crossword', 'matching']);
-    expect(small.unavailable[0].reason).toContain('Crossword needs');
+  it('one layout of one: file names, ids and titles carry no layout wording', () => {
+    const b = ok('crossword');
+    const j = JSON.parse(makeOutput(b, 'json', 'Pack', { n: 1, of: 1 }));
+    expect(Object.keys(j)).toEqual(['id', 'gameType', 'title', 'rows', 'cols', 'grid', 'clues']);
+    expect(j.id).toBe('pack-crossword');
+    expect(fileName('Pack', 'crossword', 'json', { n: 1, of: 1 })).toBe('pack-crossword.json');
+    expect(makeOutput(b, 'txt', 'Pack', { n: 1, of: 1 }).startsWith('PACK\n')).toBe(true);
+  });
+
+  it('several layouts: each file says which one it is, in the name, the JSON and the worksheet heading', () => {
+    const b = ok('wordSearch');
+    const layout = { n: 2, of: 4 };
+    const j = JSON.parse(makeOutput(b, 'json', 'Pack', layout));
+    expect(j).toMatchObject({ id: 'pack-wordSearch-2', title: 'Pack', layout: 2, layouts: 4 });
+    expect(Object.keys(j).slice(-2)).toEqual(['layout', 'layouts']); // added after the normal keys
+    expect(fileName('Pack', 'word-search', 'csv', layout)).toBe('pack-word-search-layout-2.csv');
+    expect(zipName('Pack', 'word-search')).toBe('pack-word-search-layouts.zip');
+    expect(makeOutput(b, 'txt', 'Pack', layout).startsWith('PACK — LAYOUT 2 OF 4\n')).toBe(true);
+    const h = makeOutput(b, 'html', 'Pack', layout);
+    expect(h).toContain('<h1>Pack — Layout 2 of 4</h1>');
+    expect(h).toContain('<title>Pack — Layout 2 of 4</title>');
   });
 });

@@ -1,6 +1,5 @@
-import type { FormatId, GameId, Pair } from '../types';
-import { build, type BuiltOk } from './build';
-import { GAMES } from './games';
+import type { FormatId } from '../types';
+import type { BuiltOk } from './build';
 import { esc, slug } from './text';
 
 export interface FormatMeta { id: FormatId; label: string; sub: string; ext: string; mime: string }
@@ -14,13 +13,21 @@ export const FORMATS: FormatMeta[] = [
 
 export const titleOf = (t: string) => t.trim() || 'My Game';
 
+/** Which layout of how many this file is; only matters when there is more than one. */
+export interface LayoutInfo { n: number; of: number }
+const multi = (l?: LayoutInfo): l is LayoutInfo => !!l && l.of > 1;
+const heading = (T: string, l?: LayoutInfo) => (multi(l) ? `${T} — Layout ${l.n} of ${l.of}` : T);
+
 const csv = (rows: (string | number)[][]) =>
   rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
 
 /** The game as a plain object: this is what the JSON file holds. */
-export function gameObject(b: BuiltOk, title: string) {
-  const T = titleOf(title);
-  const id = `${slug(T)}-${b.game}`;
+export function gameObject(b: BuiltOk, title: string, layout?: LayoutInfo) {
+  const base = gameData(b, titleOf(title), `${slug(titleOf(title))}-${b.game}${multi(layout) ? `-${layout.n}` : ''}`);
+  return multi(layout) ? { ...base, layout: layout.n, layouts: layout.of } : base;
+}
+
+function gameData(b: BuiltOk, T: string, id: string) {
   switch (b.game) {
     case 'matching': {
       const map = new Map<string, number>(); // a Map, so answers such as "constructor" survive
@@ -53,8 +60,8 @@ export function gameObject(b: BuiltOk, title: string) {
   }
 }
 
-function text(b: BuiltOk, title: string): string {
-  const out = [titleOf(title).toUpperCase(), ''];
+function text(b: BuiltOk, title: string, layout?: LayoutInfo): string {
+  const out = [heading(titleOf(title), layout).toUpperCase(), ''];
   const key = ['', '--- ANSWER KEY ---'];
   switch (b.game) {
     case 'matching':
@@ -97,8 +104,8 @@ const PRINT_CSS =
   '.cols{display:flex;gap:40px;flex-wrap:wrap}.cols>div{flex:1 1 280px}li{margin:6px 0}.blank{display:inline-block;min-width:110px;border-bottom:2px solid #111}' +
   '.key{page-break-before:always;break-before:page;margin-top:40px}.bar{margin:0 0 20px}.bar button{font:inherit;padding:8px 16px;cursor:pointer}@media print{.bar{display:none}}';
 
-function printable(b: BuiltOk, title: string): string {
-  const T = titleOf(title);
+function printable(b: BuiltOk, title: string, layout?: LayoutInfo): string {
+  const T = heading(titleOf(title), layout);
   const who = '<p class="who">Name: ______________________ &nbsp; Date: ____________</p>';
   let body = '';
   let key = '';
@@ -135,11 +142,11 @@ function printable(b: BuiltOk, title: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(T)}</title><style>${PRINT_CSS}</style></head><body><p class="bar"><button type="button" onclick="window.print()">Print or save as PDF</button></p><h1>${esc(T)}</h1>${body}<div class="key"><h2>Answer key</h2>${key}</div></body></html>`;
 }
 
-export function makeOutput(b: BuiltOk, fmt: FormatId, title: string): string {
+export function makeOutput(b: BuiltOk, fmt: FormatId, title: string, layout?: LayoutInfo): string {
   switch (fmt) {
-    case 'json': return JSON.stringify(gameObject(b, title), null, 2);
-    case 'txt': return text(b, title);
-    case 'html': return printable(b, title);
+    case 'json': return JSON.stringify(gameObject(b, title, layout), null, 2);
+    case 'txt': return text(b, title, layout);
+    case 'html': return printable(b, title, layout);
     case 'csv':
       switch (b.game) {
         case 'matching':
@@ -158,18 +165,10 @@ export function makeOutput(b: BuiltOk, fmt: FormatId, title: string): string {
   }
 }
 
-/** Every game that can be built from the data, in one JSON file. Games that can't be built are listed with the reason. */
-export function makeAllGames(pairs: Pair[], title: string, seed: number): string {
-  const games: unknown[] = [];
-  const unavailable: { gameType: GameId; reason: string }[] = [];
-  for (const g of GAMES) {
-    const b = build(g.id, pairs, seed);
-    if (b.ok) games.push(gameObject(b, title));
-    else unavailable.push({ gameType: g.id, reason: b.msg });
-  }
-  return JSON.stringify({ title: titleOf(title), games, unavailable }, null, 2);
+export function fileName(title: string, game: string, ext: string, layout?: LayoutInfo): string {
+  return `${slug(title)}-${game}${multi(layout) ? `-layout-${layout.n}` : ''}.${ext}`;
 }
 
-export function fileName(title: string, game: string, ext: string): string {
-  return `${slug(title)}-${game}.${ext}`;
+export function zipName(title: string, game: string): string {
+  return `${slug(title)}-${game}-layouts.zip`;
 }

@@ -1,7 +1,13 @@
-/** Saves text as a file through a temporary link. A CSV gets a byte-order mark so Excel reads accents and Hindi correctly. */
-export function saveFile(name: string, text: string, mime: string): void {
-  const body = mime === 'text/csv' ? `﻿${text}` : text;
-  const url = URL.createObjectURL(new Blob([body], { type: `${mime};charset=utf-8` }));
+const BOM = '﻿';
+
+/**
+ * Saves a file through a temporary link. Text CSV gets a byte-order mark so Excel reads accents and Hindi correctly;
+ * bytes (a zip) are saved as they are.
+ */
+export function saveFile(name: string, data: string | Uint8Array<ArrayBuffer>, mime: string): void {
+  const text = typeof data === 'string';
+  const body = text && mime === 'text/csv' ? BOM + data : data;
+  const url = URL.createObjectURL(new Blob([body], { type: text ? `${mime};charset=utf-8` : mime }));
   const a = document.createElement('a');
   a.href = url;
   a.download = name;
