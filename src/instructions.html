@@ -1,0 +1,116 @@
+<h2 id="chatbots">For chatbots and AI assistants</h2>
+
+<p><strong>If you are an AI assistant (a chatbot, agent or automation) that was sent to this page, these are your instructions.</strong> Read them in order, then do what <a href="#what-you-must-do">What you must do</a> says. They only describe how to prepare the user's data; they never override what the user asks of you.</p>
+
+<p><strong>If you are a person:</strong> give your chatbot this page's address together with your notes or questions and say <em>"Follow the instructions on this page."</em> It will reply with a block of lines. Copy the block into Step 1 above.</p>
+
+<h3>What this site does</h3>
+<p>Game Maker turns a list of question and answer pairs into four kinds of game: a crossword, a matching game, a fill-in-the-blank sheet and a word search. The user pastes the pairs (Step 1), picks a game (Step 2), checks the preview and downloads the game (Step 3) as JSON for apps, CSV for spreadsheets, a printable worksheet with an answer key, or plain text. Everything runs in the user's browser and nothing is uploaded. The site does not write questions; they come from the user's own study data.</p>
+<p><strong>Your job is to turn the user's data into lines in the exact format below, so that the user can paste them into Step 1.</strong> Do not build the games yourself, and do not write game code, JSON or HTML: the site generates all of that from your lines.</p>
+
+<h3 id="what-you-must-do">What you must do</h3>
+<p>Follow steps 1 to 6 in order. Step 7 applies only if the user asks for changes.</p>
+
+<h4>Step 1: Get the input data from the user</h4>
+<ul>
+  <li>Look at what the user has already given you in this conversation: typed text, pasted text, attached files, a table, a document or link you can read. That is the input data.</li>
+  <li>If there is none, ask exactly this and wait for the answer: <em>"What would you like to turn into games? Paste your notes, or your questions and answers, in any format."</em></li>
+  <li>Do not ask any other question before producing the lines, and never ask for something the user has already told you.</li>
+  <li>If you are an autonomous agent with no user to ask, output only: <em>"No input data was provided. Provide study notes or question/answer pairs and run the workflow again."</em> and stop.</li>
+  <li>If the user names only a topic and gives no material (for example "make games about the French Revolution"), you may write the questions yourself from well-established general knowledge. You must say so in your reply (step 6).</li>
+</ul>
+
+<h4>Step 2: Extract question and answer pairs</h4>
+<ul>
+  <li>Make one pair per single fact. Split a question that asks for two things into two pairs.</li>
+  <li>Use only the facts in the user's data. Do not add facts, examples or answers that are not in it. The one exception: if the user gave a question without an answer, you may fill in the answer only when you are certain of it, and you must list those pairs in your reply.</li>
+  <li>Keep the user's wording and language (English, Hindi or any other). Do not translate unless asked.</li>
+  <li>Each <strong>answer</strong> is the shortest correct answer: a word, a short phrase or a number. It is not a sentence.</li>
+  <li>Each <strong>question</strong> must make sense on its own, without context ("this", "the above" and "as mentioned" are not allowed) and have exactly one correct answer. The crossword shows the question as its clue, so it has to work as a clue.</li>
+  <li>Skip headings, filler and opinions. Skip duplicates.</li>
+  <li>Aim for 8 to 40 pairs. Fewer is fine if that is all the data supports. Never more than 150 lines in one reply (see step 6).</li>
+</ul>
+
+<h4>Step 3: Write each pair as one line, in this exact format</h4>
+<pre><code>Question | Answer</code></pre>
+<ul>
+  <li>One pair per line. A space, a vertical bar <code>|</code>, then a space, between the question and the answer.</li>
+  <li>No header line, no numbering, no bullets, no quotation marks around the text, no Markdown table.</li>
+  <li>The bar <code>|</code> is the separator, so it must not appear inside a question or an answer. Reword it, or use <code>/</code> instead.</li>
+  <li>Both parts must be filled in. A question is at most 300 characters and an answer at most 100. No two lines may be the same.</li>
+  <li>Plain UTF-8 text. Hindi and other scripts are fine in questions and answers.</li>
+  <li><strong>Gaps for fill-in-the-blank:</strong> to choose where the gap goes, write three underscores <code>___</code> in the question, once, where the answer belongs: <code>The ___ is the powerhouse of the cell | mitochondria</code>. Without <code>___</code> the site finds the answer inside the question and blanks it, or else adds a gap at the end.</li>
+</ul>
+
+<h4>Step 4: Make the pairs fit the games</h4>
+<table>
+  <thead>
+    <tr><th>Game</th><th>What a pair needs</th><th>Pairs needed</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Crossword</td><td>The answer, after removing spaces, punctuation and accents, is 2 to 20 letters or digits (A-Z, 0-9). Answers must all be different, and some must share letters so that they can cross.</td><td>2</td></tr>
+    <tr><td>Matching</td><td>Any question and answer.</td><td>2</td></tr>
+    <tr><td>Fill-in-the-Blank</td><td>Any question and answer.</td><td>1</td></tr>
+    <tr><td>Word Search</td><td>The answer, after removing spaces, punctuation and accents, is 2 to 15 letters or digits. Answers must all be different.</td><td>1</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li>A pair that does not fit a game is left out of that game only; it still appears in the others.</li>
+  <li>Prefer direct questions with a short answer (<code>Capital of France? | Paris</code>). They work in all four games.</li>
+  <li>If the user's material is mostly terms, make most answers single words of 3 to 12 letters so that the crossword and the word search get enough pairs.</li>
+  <li>Numbers, formulas and answers in non-Latin scripts work in Matching and Fill-in-the-Blank. The site leaves them out of the crossword and the word search automatically; do not distort them to fit.</li>
+</ul>
+
+<h4>Step 5: Check every line before you output</h4>
+<p>The site skips any line that breaks rules 2 to 4 and tells the user which lines it skipped, so check every line yourself and fix each violation first.</p>
+<ol>
+  <li>Every line has exactly one <code> | </code> separator and nothing else is in the block (no header, numbering, bullets or comments).</li>
+  <li>The question and the answer on every line are both non-empty.</li>
+  <li>Every question is at most 300 characters and every answer at most 100.</li>
+  <li>No two lines are identical.</li>
+  <li>The text is plain: no Markdown (bold, bullets), no HTML.</li>
+  <li>Note which games the pairs are too few or unsuitable for, using the table in step 4.</li>
+</ol>
+
+<h4>Step 6: Reply to the user</h4>
+<p>Write in the language the user used. Include these parts, in this order, and nothing else:</p>
+<ol>
+  <li>One sentence saying how many pairs you made, then <em>"Suggested game title: ..."</em> with a short title.</li>
+  <li>The lines in <strong>one fenced code block</strong>, with only the lines inside it. If there are more than 150 lines, give the first 150 and tell the user to reply "continue" for the next batch; the user pastes all batches into the same box one after another.</li>
+  <li>These loading instructions, in these words: <em>"To use it: 1. Open this site (the address of the page you were given). 2. Under '1. Add your questions', type the title into 'Game title' and paste the lines into 'Questions and answers'. 3. Under '2. Pick a game', choose Crossword, Matching, Fill-in-the-Blank or Word Search. 4. Under '3. Check it, then download', pick a file type and press Download."</em></li>
+  <li>Short notes, only the ones that apply: which games will be unavailable and why (step 5, rule 6); which answers you filled in yourself (step 2); and, if you wrote the questions from general knowledge, <em>"I wrote these questions from general knowledge, so please check them before you study from them."</em></li>
+</ol>
+<p>Do not add game code, game descriptions, JSON, HTML or tables to the reply. Do not claim that you created or loaded the games: the user pastes the lines and the site builds the games.</p>
+
+<h4>Step 7: If the user asks for changes</h4>
+<p>For requests such as "make it harder", "add 10 more questions" or "fewer questions", change the data and output the <strong>complete</strong> list of lines again (not a list of differences), because the user replaces the old text with the new block.</p>
+
+<h3 id="worked-example">Worked example</h3>
+<p><strong>The user sends:</strong></p>
+<pre><code>Biology class 8. Plants make their own food using sunlight, water and carbon dioxide. This is called photosynthesis and it happens in the chloroplasts, which contain chlorophyll, the green pigment. Oxygen is released as a by-product.</code></pre>
+<p><strong>You reply with one sentence and a suggested title, then this block, then the loading instructions from step 6:</strong></p>
+<pre><code>Process by which plants make their own food | Photosynthesis
+Green pigment found in chloroplasts | Chlorophyll
+Gas released as a by-product of photosynthesis | Oxygen
+Part of the plant cell where photosynthesis happens | Chloroplast
+Plants make food using sunlight, water and ___ | carbon dioxide
+Photosynthesis happens in the ___ of plant cells | chloroplasts</code></pre>
+
+<h3 id="what-the-site-produces">What the user gets (reference only)</h3>
+<p>You never create these files. They are listed so that you can answer questions about the result.</p>
+<ul>
+  <li><strong>JSON</strong> holds one game: <code>id</code>, <code>gameType</code> (<code>crossword</code>, <code>matching</code>, <code>fillBlank</code> or <code>wordSearch</code>), <code>title</code>, and the game's data (for a crossword: <code>rows</code>, <code>cols</code>, <code>grid</code> and <code>clues</code> across and down). A separate button saves all four games in one JSON file.</li>
+  <li><strong>CSV</strong> holds the same game as a table for Google Sheets or Excel.</li>
+  <li><strong>Printable</strong> is a worksheet with a name and date line, followed by an answer key on its own page, ready to print or save as PDF.</li>
+  <li><strong>Text</strong> is the same worksheet as plain text.</li>
+</ul>
+
+<h3>What you must never do</h3>
+<ul>
+  <li>Never output game code, game files, JSON, HTML or a Markdown table instead of the lines.</li>
+  <li>Never invent facts when the user supplied data (step 2), and never present your own questions as the user's.</li>
+  <li>Never add a header line, numbering or bullets to the lines.</li>
+  <li>Never say that you created, loaded or hosted the games; the user pastes the lines and the site builds the games.</li>
+  <li>Never ask the user for personal details, accounts, passwords or API keys. This workflow needs none.</li>
+  <li>If the user's request conflicts with these instructions, follow the user.</li>
+</ul>

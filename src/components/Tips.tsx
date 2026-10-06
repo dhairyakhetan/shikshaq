@@ -1,0 +1,14 @@
+import { LIMITS } from '../lib/games';
+
+export function Tips() {
+  return (
+    <section id="info" aria-labelledby="h-info" className="tips">
+      <h2 id="h-info">Quick tips</h2>
+      <div className="tip" style={{ background: '#EEF2F8' }}><b style={{ color: '#1F4FD1' }}>Data format:</b> one pair per line: <code>Question | Answer</code>. Pasting from Google Sheets or a Markdown table works too.</div>
+      <div className="tip" style={{ background: '#DDF3EF' }}><b style={{ color: '#0C7A6B' }}>Fill-in-the-Blank:</b> put <code>___</code> in your question to choose where the blank goes.</div>
+      <div className="tip" style={{ background: '#FCEBDD' }}><b style={{ color: '#B4531B' }}>Crossword:</b> needs 2+ answers that share letters. Answers are {LIMITS.crossword.min}–{LIMITS.crossword.max} letters or digits; spaces and accents are ignored.</div>
+      <div className="tip" style={{ background: '#FBE3EE' }}><b style={{ color: '#B0306B' }}>Word Search:</b> hides only the answers in a grid. {LIMITS.wordSearch.min}–{LIMITS.wordSearch.max} letters or digits each.</div>
+      <div className="tip bare"><b>Downloads:</b> JSON for apps, a printable worksheet with answer key, CSV for spreadsheets, text for anywhere. Your work is saved in this browser and never uploaded.</div>
+    </section>
+  );
+}
