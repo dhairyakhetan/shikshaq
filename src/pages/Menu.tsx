@@ -4,6 +4,8 @@ import { eligible, GAME_LIST } from '../games';
 import { loadScores } from '../lib/scores';
 import { useFilters } from './filters';
 
+const SOURCE = { pasted: 'the questions you pasted', sheet: 'your Google Sheet', sample: 'the built-in sample' } as const;
+
 export function Menu() {
   const data = useDataset();
   const f = useFilters();
@@ -12,9 +14,9 @@ export function Menu() {
 
   return (
     <>
-      <h1>Pick a game</h1>
+      <h2>Step 2 · Pick a game</h2>
       <p className="hint">
-        {data.items.length} questions from {data.source === 'sheet' ? 'your Google Sheet' : 'the built-in sample'}.
+        {data.items.length} questions from {SOURCE[data.source]}.
       </p>
       {data.warning && <p className="notice">{data.warning}</p>}
 

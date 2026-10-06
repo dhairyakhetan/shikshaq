@@ -17,7 +17,7 @@ export interface QA {
 export interface Dataset {
   items: QA[];
   skipped: { row: number; reason: string }[];
-  source: 'sheet' | 'sample';
+  source: 'pasted' | 'sheet' | 'sample';
   /** Set when the sheet is configured but could not be loaded. */
   warning?: string;
 }

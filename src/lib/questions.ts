@@ -19,8 +19,8 @@ const GAME_NAMES: Record<string, GameId> = {
   wordsearch: 'wordSearch',
 };
 
-const MAX_QUESTION = 300;
-const MAX_ANSWER = 100;
+export const MAX_QUESTION = 300;
+export const MAX_ANSWER = 100;
 
 export interface ParseResult {
   items: QA[];
@@ -41,12 +41,14 @@ function parseGames(cell: string, problems: string[]): GameId[] | null {
 }
 
 /**
- * Sheet CSV → validated questions. The first row is a header when it has
+ * CSV (or tab-separated text copied from a spreadsheet) → validated questions.
+ * The first row is a header when it has
  * Question + Answer columns; otherwise columns are read in template order
  * (Question, Answer, Type, Subject, Difficulty).
  */
 export function parseQuestions(csv: string): ParseResult {
-  const rows = parseCsv(csv);
+  // A comma-separated file never has a tab on its first line; copied spreadsheet cells always do.
+  const rows = parseCsv(csv, /^[^\r\n]*\t/.test(csv.replace(/^\uFEFF/, '')) ? '\t' : ',');
   const cols = { question: 0, answer: 1, type: 2, subject: 3, difficulty: 4 };
   let first = 0;
 

@@ -1,7 +1,20 @@
-# Shikshaq – study games from a Google Sheet
+# Shikshaq – turn study data into games
 
-One site, four games. Someone types questions and answers into a Google Sheet; the site turns
-them into playable games automatically. No build step per game, no database, no redeploy when the sheet changes.
+One site, four games, and a workflow that starts with **data from the user**:
+
+1. The user gives a chatbot their notes or questions and the address of this site.
+2. The home page is written for the chatbot: plain HTML with exact instructions (`src/instructions.html`). The chatbot
+   replies with one CSV block in a fixed format.
+3. The user pastes the CSV into **Step 1 · Paste your questions** on the home page (or into a connected Google Sheet).
+4. The site builds the games from the rows in the browser: no build step per game, no database, no redeploy.
+
+The instructions are baked into `index.html` at build time, so a fetcher that doesn't run JavaScript (most chatbot
+web-fetch tools, `curl`) receives them on **every** URL of the site. The same file is rendered on the home page for people.
+Tests (`tests/instructions.test.ts`) fail if the page and the code drift apart: limits, minimums, round sizes, type names,
+button labels, and the worked examples are parsed with the real parser.
+
+Where the questions come from, first match wins: **pasted by the user** (this browser only) → **Google Sheet** via
+`/api/questions` (when `SHEET_CSV_URL` is set) → the **bundled sample** in `public/questions.csv`.
 
 | Game | How it plays | Which rows it uses |
 | --- | --- | --- |
@@ -12,7 +25,7 @@ them into playable games automatically. No build step per game, no database, no 
 
 Each play is a short round (6–10 random questions); **New round** reshuffles. Best score per game is kept in the browser.
 
-## The sheet
+## The data format (CSV, or cells pasted from a spreadsheet)
 
 | Question | Answer | Type | Subject | Difficulty |
 | --- | --- | --- | --- | --- |
@@ -21,6 +34,7 @@ Each play is a short round (6–10 random questions); **New round** reshuffles. 
 | Large feline predator | Lion | wordSearch | Biology | Easy |
 | Capital of Japan? | Tokyo \| Tokyo, Japan | matching,crossword | Geography | Medium |
 
+- Pasted tab-separated text (copied from Google Sheets or Excel) works too.
 - **Question** and **Answer** are required. The other columns are optional; header order doesn't matter.
 - **Type** is optional. Blank means "use this row in every game it suits". Otherwise list one or more of
   `matching`, `fillBlank`, `crossword`, `wordSearch` (comma/semicolon separated).
@@ -50,19 +64,24 @@ is unset the site runs on the sample questions in `public/questions.csv`, so a f
 ```bash
 npm install
 npm run dev        # http://localhost:5173, uses public/questions.csv
-npm test           # parsers, answer matching, crossword + word search generators, API function
+npm test           # parsers, answer matching, generators, API function, instructions-vs-code drift guard
 npm run build      # typecheck + production build into dist/
 npx vercel dev     # optional: also runs /api/questions locally (needs SHEET_CSV_URL)
 ```
 
 ```
+src/instructions.html the instructions for chatbots – single source: baked into index.html and rendered on the home page
+vite.config.ts        build plugin that bakes the instructions into index.html
 api/questions.ts      Vercel function – fetches the sheet as CSV
-src/data.ts           loads the sheet (or the sample) and validates rows
+src/data.ts           picks the data source (pasted → sheet → sample) and validates rows
 src/lib/              CSV parser, answer matching, crossword + word-search generators, score storage
 src/games/            one React component per game + the registry (src/games/index.ts)
-src/pages/            menu and play pages
+src/pages/            home (instructions, paste box, game menu) and play pages
 public/questions.csv  sample questions
 ```
+
+**Changing a rule** (a limit, a minimum, a type name, a label)? Update `src/instructions.html` in the same change;
+`npm test` tells you what no longer matches.
 
 **Adding a game:** write a component taking `{ items, onFinish }`, then add an entry to `GAMES` in `src/games/index.ts`
 (title, round size, which rows suit it). The menu, filters, scoring and routing pick it up.

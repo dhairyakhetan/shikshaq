@@ -1,3 +1,4 @@
+import { readPasted, clearPasted } from './lib/pasted';
 import { parseQuestions } from './lib/questions';
 import type { Dataset } from './types';
 
@@ -16,8 +17,20 @@ async function fetchSheet(): Promise<string | { warning: string } | null> {
   return null; // not configured, or `vite dev` without the API
 }
 
-/** Sheet via /api/questions when configured, otherwise the bundled sample. Never rejects for a missing sheet. */
+/**
+ * Where the questions come from, first match wins:
+ *   1. what the user pasted into the site (this browser only)
+ *   2. the Google Sheet behind /api/questions, when configured
+ *   3. the bundled sample
+ */
 export async function loadDataset(): Promise<Dataset> {
+  const pasted = readPasted();
+  if (pasted) {
+    const { items, skipped } = parseQuestions(pasted);
+    if (items.length) return { items, skipped, source: 'pasted' };
+    clearPasted(); // unusable leftovers
+  }
+
   const sheet = await fetchSheet();
   if (typeof sheet === 'string') {
     const { items, skipped } = parseQuestions(sheet);
