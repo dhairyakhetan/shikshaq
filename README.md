@@ -3,8 +3,8 @@
 Turn a list of questions and answers into a **crossword**, a **matching** game, a **fill-in-the-blank** sheet or a **word search**,
 and download it as JSON, CSV, a printable worksheet (with answer key) or plain text.
 
-It is a workflow, not a gameplay engine: the user's data goes in, a game *file* comes out. Everything runs in the browser;
-nothing is uploaded and there is no backend.
+It is a workflow, not a gameplay engine: the user's data goes in, a game *file* comes out. Everything runs in the browser and
+nothing is uploaded, unless you switch on the optional online saving described below.
 
 1. **Add your questions.** One per line, `Question | Answer`. Pasting two columns from Google Sheets, or a Markdown table from a chatbot, works too.
 2. **Pick a game.** Each card shows how many of your pairs fit it. Below the cards, choose how long a layout is and how many to make (see *Layouts*).
@@ -67,12 +67,37 @@ The table in Step 1 marks each question with the layout it lands in (L1, L2, …
 - **Text**: the same worksheet as plain text.
 - **All layouts (.zip)**: when there is more than one layout, one button saves every layout as its own file of the chosen type.
 
+## Save online with Supabase (optional)
+
+Lets people keep a question set online, open it on another device and share it as a link (`/?set=<id>`).
+Until it is set up, none of this appears on the page and nothing is ever sent anywhere.
+
+1. **Create the database objects.** Supabase dashboard > SQL Editor > New query > paste the contents of `supabase/schema.sql` > Run. Safe to run again.
+2. **Copy the public key.** Project Settings > API Keys > the **Publishable key** (`sb_publishable_...`), or the older **anon** key.
+   Never the *secret* or *service_role* key: it would be published in the page. (The site refuses to use one if it spots it.)
+3. **Give the site the two settings.** In Vercel: Project > Settings > Environment Variables, for Production and Preview:
+   `VITE_SUPABASE_URL` (the project URL, `https://<project>.supabase.co`) and `VITE_SUPABASE_PUBLISHABLE_KEY`. Then redeploy:
+   Vite bakes them in when it builds. For local work copy `.env.example` to `.env.local`.
+
+How it is protected. The public key is visible to anyone, so the table itself is locked: row level security is on, there are no policies
+and no grants, so that key cannot list, read, change or delete rows. The site can only call two functions: *save a set* (returns a random
+id) and *open a set by id*. A set is limited to 200,000 characters and a 120-character title. There is no way to list sets, so
+only people who have a link can open one. The site does not offer editing or deleting; remove sets in the dashboard (Table Editor), or
+uncomment the nightly clean-up at the bottom of `schema.sql`.
+
+What to know. Anyone with a link can open that set, so it is not for anything private. Anyone can also *save* sets (that is what a public key
+allows), so someone could fill the database with junk; the size limits cap each set, and the clean-up job above bounds the total. If that ever matters, put
+a CAPTCHA or a login in front of saving (Supabase Auth).
+
+`tests/schema.test.ts` loads `schema.sql` into an in-process Postgres (pglite) and checks it as the `anon` role: the table is unreadable and
+unwritable, saving and opening work, limits hold, and the second wall (row level security) holds even if grants were put back.
+
 ## Deploy to Vercel
 
-1. Push the repo to GitHub and **Import** it in Vercel. The Vite preset is detected: build `npm run build`, output `dist`. No environment variables.
+1. Push the repo to GitHub and **Import** it in Vercel. The Vite preset is detected: build `npm run build`, output `dist`. No environment variables are needed, unless you want online saving (above).
 2. `vercel.json` only adds security headers (`nosniff`, `no-referrer`, `SAMEORIGIN`) and long-lived caching for hashed assets.
 
-Fonts (Atkinson Hyperlegible, Bricolage Grotesque) are bundled, so the page makes no third-party requests.
+Fonts (Atkinson Hyperlegible, Bricolage Grotesque) are bundled, so the page makes no third-party requests (with online saving on, it talks to your Supabase project only when someone presses Save online or opens a shared link).
 
 ## Develop
 
@@ -90,6 +115,8 @@ src/lib/games.ts           the four games: names, colours, what fits, minimums
 src/lib/build.ts           matching, fill-in-the-blank, crossword, word search builders (seeded, repeatable)
 src/lib/layouts.ts         splits a game's questions into layouts
 src/lib/bundle.ts, zip.ts  one file per layout, and the zip writer
+src/lib/cloud.ts, saved.ts the Supabase client (plain fetch) and this browser's list of saved sets
+supabase/schema.sql        the table and the two functions to run in Supabase
 src/lib/crossword.ts       interlocking-grid generator (best of many layouts)
 src/lib/wordsearch.ts      word-search generator
 src/lib/output.ts          JSON / CSV / printable HTML / text writers

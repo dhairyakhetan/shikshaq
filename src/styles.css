@@ -225,3 +225,18 @@ select:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
   .step-head h2 { font-size: 24px; }
   html { scroll-padding-top: 130px; }
 }
+
+/* online saving (only shown when the site is configured for it) */
+.cloud { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; margin-top: 4px; }
+.cloud > p { margin: 0; color: var(--muted); font-size: 15px; }
+.notice { border-radius: 12px; padding: 10px 14px; font-size: 15px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.notice.ok { background: #dcf5e8; color: #0b4a25; }
+.notice.bad { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink); }
+.link-row { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.link-row input { flex: 1 1 220px; min-width: 0; height: 44px; padding: 0 10px; border: 2px solid var(--line-strong); border-radius: 10px; background: #fff; color: var(--ink); font: 14px var(--mono); }
+.btn.tiny { min-height: 44px; padding: 0 14px; font-size: 15px; }
+.saved summary { cursor: pointer; font-weight: 700; padding: 8px 0; }
+.saved ul { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.saved li { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.saved .t { flex: 1 1 140px; min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
+.saved small { color: var(--muted); font-weight: 400; margin-left: 4px; }

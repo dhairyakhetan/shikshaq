@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { GAMES } from '../lib/games';
 import type { Parsed } from '../types';
 
@@ -13,11 +13,13 @@ interface Props {
   onRaw: (v: string) => void;
   onSample: () => void;
   onClear: () => void;
+  /** Optional extra controls under the buttons (the online-saving panel). */
+  extra?: ReactNode;
 }
 
 const PREVIEW_ROWS = 8;
 
-export function DataStep({ title, raw, parsed, layoutOf, layoutCount, onTitle, onRaw, onSample, onClear }: Props) {
+export function DataStep({ title, raw, parsed, layoutOf, layoutCount, onTitle, onRaw, onSample, onClear, extra }: Props) {
   const [all, setAll] = useState(false);
   const n = parsed.pairs.length;
   const long = n > PREVIEW_ROWS;
@@ -44,6 +46,7 @@ export function DataStep({ title, raw, parsed, layoutOf, layoutCount, onTitle, o
             <button type="button" className="btn" onClick={onSample}>Load sample</button>
             <button type="button" className="btn quiet" onClick={onClear}>Clear</button>
           </div>
+          {extra}
         </div>
 
         <div className="col">

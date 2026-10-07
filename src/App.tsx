@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { CloudPanel } from './components/CloudPanel';
 import { DataStep } from './components/DataStep';
 import { DownloadStep } from './components/DownloadStep';
 import { GameStep } from './components/GameStep';
@@ -8,6 +9,7 @@ import { LayoutOptions } from './components/LayoutOptions';
 import { Tips } from './components/Tips';
 import { build } from './lib/build';
 import { layoutFiles } from './lib/bundle';
+import { cloudConfig } from './lib/cloud';
 import { saveFile } from './lib/files';
 import { GAMES, META, usable } from './lib/games';
 import { DEFAULT_PER_LAYOUT, LAYOUT_COUNT_CHOICES, MAX_LAYOUTS, PER_LAYOUT_CHOICES, firstLayouts, layoutSeed, planLayouts, type Order } from './lib/layouts';
@@ -24,6 +26,9 @@ interface State {
   /** The layout on show (0-based) and, per layout, how often "Rearrange" was pressed. */
   current: number; rolls: number[];
 }
+
+/** Set at build time (VITE_SUPABASE_URL and a public key). Without it the "Save online" part simply isn't there. */
+const CLOUD = cloudConfig();
 
 const KEY = 'game-maker:v1';
 const DEFAULTS: State = { title: SAMPLE_TITLE, raw: SAMPLE, game: 'crossword', fmt: 'json', showKey: false, perLayout: DEFAULT_PER_LAYOUT, layouts: 0, order: 'written', deal: 1, current: 0, rolls: [] };
@@ -116,12 +121,13 @@ export function App() {
       <main id="top">
         <div className="intro">
           <h1>Turn your questions into games.</h1>
-          <p>Three steps: <b>Paste</b> → <b>Pick</b> → <b>Download</b>. Nothing to install. Your data never leaves this page.</p>
+          <p>Three steps: <b>Paste</b> → <b>Pick</b> → <b>Download</b>. Nothing to install. {CLOUD ? 'Your questions stay in this browser unless you press Save online.' : 'Your data never leaves this page.'}</p>
         </div>
         <DataStep
           title={s.title} raw={s.raw} parsed={parsed} layoutOf={layoutOf} layoutCount={count}
           onTitle={(title) => set({ title })} onRaw={(r) => set({ raw: r })}
           onSample={() => set({ raw: SAMPLE, title: SAMPLE_TITLE })} onClear={() => set({ raw: '' })}
+          extra={CLOUD ? <CloudPanel cfg={CLOUD} title={s.title} raw={s.raw} onLoad={(title, raw) => set({ title, raw, current: 0, rolls: [] })} /> : null}
         />
         <GameStep game={s.game} pairs={parsed.pairs} onPick={(game) => set({ game, current: 0 })}>
           <LayoutOptions
@@ -135,7 +141,7 @@ export function App() {
           onPickLayout={(current) => set({ current })} onFmt={(fmt) => set({ fmt })} onToggleKey={() => set({ showKey: !s.showKey })}
           onRearrange={rearrange} onDownloadAll={downloadAll}
         />
-        <Tips />
+        <Tips online={!!CLOUD} />
         <Instructions />
       </main>
     </div>
