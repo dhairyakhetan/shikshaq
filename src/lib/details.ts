@@ -287,6 +287,14 @@ export function readDetails(text: string): Record<DetailKey, string> {
   return out;
 }
 
+/** The line (from 1) a box writes to, or null when it has none yet. */
+export function detailLine(text: string, k: DetailKey): number | null {
+  const lines = text.split('\n');
+  const end = header(lines);
+  const i = lines.findIndex((l, n) => n < end && detailOf(l)?.key === k);
+  return i < 0 ? null : i + 1;
+}
+
 const lineFor = (k: DetailKey, v: string) => (k === 'chapter' && /^\d/.test(v) ? `Chapter ${v}` : `${LABEL[k]}: ${v}`);
 
 /** Typing in a box writes its line at the top of the text (in the order Board, Class, Subject, Chapter); emptying it removes the line. */

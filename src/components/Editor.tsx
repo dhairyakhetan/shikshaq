@@ -7,10 +7,12 @@ import type { Issue } from '../lib/format';
  * padding and width: the copy is invisible except for the underlines on lines with a problem. The two scroll together.
  * Moving the cursor onto an underlined line shows why it is underlined.
  */
-export function Editor({ value, onChange, onPaste, issues, levels, boxRef, caret, setCaret }: {
+export function Editor({ value, onChange, onPaste, onTyping, issues, levels, boxRef, caret, setCaret }: {
   value: string;
   onChange: (v: string) => void;
   onPaste: () => void;
+  /** The line just typed on (null when the box is left): problems there wait until the cursor moves on. */
+  onTyping: (line: number | null) => void;
   issues: Issue[];
   levels: Map<number, Level>;
   boxRef: RefObject<HTMLTextAreaElement | null>;
@@ -19,6 +21,7 @@ export function Editor({ value, onChange, onPaste, issues, levels, boxRef, caret
   setCaret: (line: number) => void;
 }) {
   const back = useRef<HTMLDivElement>(null);
+  const pasted = useRef(false); // a paste is finished text: check all of it at once
 
   const sync = () => {
     const ta = boxRef.current;
@@ -37,7 +40,8 @@ export function Editor({ value, onChange, onPaste, issues, levels, boxRef, caret
     return () => ro.disconnect();
   }, []);
 
-  const onCaret = (ta: HTMLTextAreaElement) => setCaret(ta.value.slice(0, ta.selectionStart).split('\n').length);
+  const lineOf = (ta: HTMLTextAreaElement) => ta.value.slice(0, ta.selectionStart).split('\n').length;
+  const onCaret = (ta: HTMLTextAreaElement) => setCaret(lineOf(ta));
   const here = issues.filter((x) => x.line === caret);
   const errors = issues.filter((x) => x.level === 'error').length;
 
@@ -59,7 +63,12 @@ export function Editor({ value, onChange, onPaste, issues, levels, boxRef, caret
           </div>
         </div>
         <textarea id="q" ref={boxRef} spellCheck={false} value={value} aria-invalid={errors > 0} aria-describedby="caret-note"
-          onChange={(e) => { onChange(e.target.value); onCaret(e.target); }} onPaste={onPaste}
+          onChange={(e) => {
+            onChange(e.target.value);
+            if (pasted.current) { pasted.current = false; onCaret(e.target); onTyping(null); } else onTyping(lineOf(e.target));
+          }}
+          onPaste={() => { pasted.current = true; onPaste(); }}
+          onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => onTyping(null)}
           onScroll={sync} onSelect={(e) => onCaret(e.currentTarget)} onClick={(e) => onCaret(e.currentTarget)} onKeyUp={(e) => onCaret(e.currentTarget)}
           placeholder={'Any format works, for example:\n\nTopic 1: Chemical equations\nWhat is ...? | Answer\n1. What is ...? Ans: Answer\nQ. What is ...?\nAns. Answer'} />
       </div>

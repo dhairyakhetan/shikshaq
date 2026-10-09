@@ -4,8 +4,8 @@ import { Guide } from './components/Guide';
 import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon } from './components/icons';
 import { RowsTable } from './components/RowsTable';
 import { EXAMPLE } from './example';
-import { checkDetail, DETAIL_KEYS, detailsId, readDetails, standardDetail, writeDetail, type DetailKey } from './lib/details';
-import { COLUMNS, format, lineLevels, missing } from './lib/format';
+import { checkDetail, DETAIL_KEYS, detailLine, detailsId, readDetails, standardDetail, writeDetail, type DetailKey } from './lib/details';
+import { COLUMNS, format, lineLevels, missing, visibleIssues } from './lib/format';
 import { baseName, copyText, download, toCSV, toJSON, toTSV } from './lib/rows';
 
 const KEY = 'question-formatter:v1';
@@ -43,6 +43,10 @@ export function App() {
   const [batch, setBatch] = useState(0);
   const [undo, setUndo] = useState<{ text: string; what: string } | null>(null);
   const [resultsInView, setResultsInView] = useState(true);
+  /** The line being typed on in the Questions box, and the detail box being typed in: problems there wait until they move on. */
+  const [typingLine, setTypingLine] = useState<number | null>(null);
+  const [typingBox, setTypingBox] = useState<DetailKey | null>(null);
+  const boxTimer = useRef(0);
   const box = useRef<HTMLTextAreaElement>(null);
   const results = useRef<HTMLElement>(null);
   const undoTimer = useRef(0);
@@ -61,8 +65,18 @@ export function App() {
   }, []);
 
   const text = useDeferredValue(raw);
-  const { rows, issues } = useMemo(() => format(text), [text]);
-  const levels = useMemo(() => lineLevels(issues), [issues]);
+  const { rows, issues: all } = useMemo(() => format(text), [text]);
+  const issues = visibleIssues(all, { caret: typingLine, line: typingBox && detailLine(raw, typingBox) });
+  /** Moving the cursor to another line ends "still typing" there; arriving on a line shows its problems. */
+  const moveCaret = (line: number) => {
+    setCaret(line);
+    setTypingLine((t) => (t === line ? t : null));
+  };
+  const typedOn = (line: number | null) => {
+    if (line !== null) setCaret(line);
+    setTypingLine(line);
+  };
+  const levels = lineLevels(issues);
   const details = readDetails(raw);
   const id = detailsId(details);
   const gaps = missing(rows);
@@ -131,7 +145,7 @@ export function App() {
     ta.focus({ preventScroll: true });
     ta.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0));
     ta.scrollTop = Math.max(0, (line - 3) * (parseFloat(getComputedStyle(ta).lineHeight) || 24));
-    setCaret(line);
+    moveCaret(line);
   };
 
   return (
@@ -153,14 +167,23 @@ export function App() {
             <h2 id="in-h">1. Paste</h2>
             <div className="details">
               {DETAIL_KEYS.map((k) => {
-                const problem = checkDetail(k, details[k]);
+                const problem = typingBox === k ? undefined : checkDetail(k, details[k]);
                 return (
                   <div className="field" key={k}>
                     <label htmlFor={`d-${k}`}>{FIELDS[k].label}</label>
                     <input id={`d-${k}`} type="text" value={details[k]} placeholder={`e.g. ${FIELDS[k].hint}`} autoComplete="off"
                       className={problem ? problem.level : undefined} aria-invalid={problem?.level === 'error'} aria-describedby={problem ? `d-${k}-msg` : undefined}
-                      onChange={(e) => { const v = e.target.value; setRaw((r) => writeDetail(r, k, v)); }}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setRaw((r) => writeDetail(r, k, v));
+                        // a box's warning waits until it is left, or until typing pauses
+                        setTypingBox(k);
+                        clearTimeout(boxTimer.current);
+                        boxTimer.current = window.setTimeout(() => setTypingBox(null), 1500);
+                      }}
                       onBlur={(e) => {
+                        clearTimeout(boxTimer.current);
+                        setTypingBox(null);
                         const std = standardDetail(k, e.target.value);
                         if (std !== e.target.value) setRaw((r) => writeDetail(r, k, std));
                       }} />
@@ -175,7 +198,7 @@ export function App() {
             </p>
 
             <label htmlFor="q">Questions</label>
-            <Editor value={raw} onChange={setRaw} onPaste={() => setBatch((b) => b + 1)} issues={issues} levels={levels} boxRef={box} caret={caret} setCaret={setCaret} />
+            <Editor value={raw} onChange={setRaw} onPaste={() => setBatch((b) => b + 1)} onTyping={typedOn} issues={issues} levels={levels} boxRef={box} caret={caret} setCaret={moveCaret} />
             <div className="row">
               <button type="button" className="btn quiet" onClick={() => replaceAll(EXAMPLE, 'Example loaded')}>Try an example</button>
               <button type="button" className="btn quiet" onClick={() => replaceAll('', 'Cleared')} disabled={!raw}>Clear</button>

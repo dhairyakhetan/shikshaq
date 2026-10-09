@@ -148,6 +148,7 @@ function cellsOf(line: string, delim: string): string[] {
 }
 
 const DEFAULT_FIELDS: Field[] = ['question', 'answer', 'difficulty'];
+export const NO_ANSWER = 'This question has no answer.';
 const CANNOT_READ = 'Couldn\'t find a question and an answer. Put " | " between them.';
 
 export function format(raw: string): Formatted {
@@ -174,7 +175,7 @@ export function format(raw: string): Formatted {
     issue(line, level, text);
   };
   const dropPending = () => {
-    if (pending) issue(pending.line, 'error', 'This question has no answer.');
+    if (pending) issue(pending.line, 'error', NO_ANSWER);
     pending = null;
   };
 
@@ -396,6 +397,16 @@ export function missing(rows: Row[]): { board: number; class: number; subject: n
     topic: rows.filter((r) => !r.topic && r.topic_no === null).length,
     id: rows.filter((r) => !r.chapter_id).length,
   };
+}
+
+/**
+ * The problems to show right now. People get to finish writing first: nothing is flagged on the line being typed,
+ * nor "no answer" on the line just above it (its answer is probably being typed), nor on the line a detail box is
+ * writing while someone types in that box. Those appear once the cursor moves on. A fix still clears at once.
+ */
+export function visibleIssues(issues: Issue[], quiet: { caret?: number | null; line?: number | null }): Issue[] {
+  const { caret, line } = quiet;
+  return issues.filter((x) => !(caret && (x.line === caret || (x.line === caret - 1 && x.text === NO_ANSWER))) && x.line !== line);
 }
 
 /** The worst problem on each line: what the editor underlines. */

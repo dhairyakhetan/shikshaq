@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EXAMPLE } from '../src/example';
-import { format, lineLevels, MAX_ANSWER, MAX_QUESTION, missing } from '../src/lib/format';
+import { format, lineLevels, MAX_ANSWER, MAX_QUESTION, missing, NO_ANSWER, visibleIssues } from '../src/lib/format';
 import { baseName, toCSV, toJSON, toRecord, toTSV } from '../src/lib/rows';
 
 const qa = (raw: string) => format(raw).rows.map((r) => [r.question, r.answer]);
@@ -210,5 +210,29 @@ describe('output for the database', () => {
     expect(baseName(rows)).toBe('CBSE10SCI01-chemical-reactions-and-equations');
     expect(baseName(format('Subject: Physics\nq1 | a1').rows)).toBe('physics-questions');
     expect(baseName([])).toBe('questions');
+  });
+});
+
+describe('letting people finish writing before flagging', () => {
+  // 1 bad class, 2 no answer (a topic line follows), 4 unreadable, 5 too many parts
+  const { issues } = format('Class: 13\nWhat is H2O?\nTopic 1: Water\njust some words\nQ1 | A1 | x | y');
+  const lines = (xs: typeof issues) => xs.map((x) => x.line);
+
+  it('shows everything when nobody is typing', () => {
+    expect(lines(visibleIssues(issues, {}))).toEqual([1, 2, 4, 5]);
+    expect(issues.find((x) => x.line === 2)!.text).toBe(NO_ANSWER);
+  });
+
+  it('holds back the line being typed, and "no answer" on the line just above it', () => {
+    expect(lines(visibleIssues(issues, { caret: 4 }))).toEqual([1, 2, 5]);
+    expect(lines(visibleIssues(issues, { caret: 3 }))).toEqual([1, 4, 5]);
+  });
+
+  it('only holds back "no answer" above, not other problems there', () => {
+    expect(lines(visibleIssues(issues, { caret: 5 }))).toEqual([1, 2, 4]);
+  });
+
+  it('holds back the line a detail box is writing while it is typed in', () => {
+    expect(lines(visibleIssues(issues, { line: 1 }))).toEqual([2, 4, 5]);
   });
 });

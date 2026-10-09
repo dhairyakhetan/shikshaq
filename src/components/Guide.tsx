@@ -93,7 +93,7 @@ Reaction in which a single reactant breaks down into simpler products | Decompos
           <h3>Underlines and warnings</h3>
           <p><span className="mark error">Red</span>: the line is <b>left out</b>. It has no answer, no question, an empty part, too many parts, is too long, is a repeat, or the class is not 1 to 12.</p>
           <p><span className="mark warn">Amber</span>: the line is <b>kept, but check it</b>. An unknown board or subject, a chapter with no number, a topic with no questions, a detail set twice, or the same chapter number with two different names.</p>
-          <p className="small muted">Put the cursor on a line to see why, or click a line number in the list.</p>
+          <p className="small muted">You can write first: a line is only checked once you move on from it, and a box once you leave it or pause. Put the cursor on an underlined line to see why, or click a line number in the list.</p>
         </article>
 
         <article className="g-card">

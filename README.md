@@ -33,15 +33,18 @@ The lists live in `src/lib/details.ts`.
   value is written the standard way (`cbse` → `CBSE`, `xi` → `11`, `maths` → `Mathematics`, `3 - acids` → `3: Acids`).
   When all four are valid the chapter ID is shown.
 - **Questions box**: lines with a problem are underlined, red when the line is left out, amber when it is kept but worth checking.
-  Putting the cursor on an underlined line says why. (A textarea can't style its text, so an exact copy of the text with the underlines
+  Putting the cursor on an underlined line says why. People get to write first: nothing is flagged on the line being typed (nor "no
+  answer" on the question just above it, whose answer is probably being typed), until the cursor moves to another line or leaves the
+  box; a detail box warns once it is left or typing pauses for 1.5 seconds. A paste is finished text and is checked at once. A fix
+  always clears straight away, and jumping to a flagged line keeps its problem in view. (A textarea can't style its text, so an exact copy of the text with the underlines
   sits behind it, kept to the same width and scroll position.)
 - **Check and download**: the rows grouped by chapter and topic with their IDs, the problems with clickable line numbers, and a note
   for questions missing a detail.
 - **Undo instead of "are you sure?"**: Clear and Try an example can be undone for 7 seconds. Download and copy buttons turn green with a
   check mark for a moment (same size, so nothing jumps). On a phone, a pill at the bottom points to the results while they are off screen.
   The header link scrolls to the guide without adding anything to the address.
-- **Motion**: the page, table rows (staggered on a paste), messages and guide cards ease in; presses give way at once; underlines wait half
-  a second so a line being typed doesn't flash red. Nothing overshoots, only transform and opacity animate, and with "reduce motion"
+- **Motion**: the page, table rows (staggered on a paste), messages and guide cards ease in; presses give way at once; underlines fade in after half
+  a second. Nothing overshoots, only transform and opacity animate, and with "reduce motion"
   switched on only short fades remain. The header is a translucent bar (solid with "reduce transparency").
 - **How to write your questions**: a guide for people at the bottom of the page (formats, detail lines, good questions, what the
   underlines mean, the IDs, board and subject codes, starting from notes).
