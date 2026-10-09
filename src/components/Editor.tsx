@@ -7,9 +7,10 @@ import type { Issue } from '../lib/format';
  * padding and width: the copy is invisible except for the underlines on lines with a problem. The two scroll together.
  * Moving the cursor onto an underlined line shows why it is underlined.
  */
-export function Editor({ value, onChange, issues, levels, boxRef, caret, setCaret }: {
+export function Editor({ value, onChange, onPaste, issues, levels, boxRef, caret, setCaret }: {
   value: string;
   onChange: (v: string) => void;
+  onPaste: () => void;
   issues: Issue[];
   levels: Map<number, Level>;
   boxRef: RefObject<HTMLTextAreaElement | null>;
@@ -54,20 +55,20 @@ export function Editor({ value, onChange, issues, levels, boxRef, caret, setCare
               return <Fragment key={i}>{nl}{lead}<span className={`mark ${level}`}>{body}</span>{l.slice(lead.length + body.length)}</Fragment>;
             })}
             {/* keeps an empty last line as tall as the textarea draws it */}
-            {'​'}
+            {'\u200b'}
           </div>
         </div>
         <textarea id="q" ref={boxRef} spellCheck={false} value={value} aria-invalid={errors > 0} aria-describedby="caret-note"
-          onChange={(e) => { onChange(e.target.value); onCaret(e.target); }}
+          onChange={(e) => { onChange(e.target.value); onCaret(e.target); }} onPaste={onPaste}
           onScroll={sync} onSelect={(e) => onCaret(e.currentTarget)} onClick={(e) => onCaret(e.currentTarget)} onKeyUp={(e) => onCaret(e.currentTarget)}
           placeholder={'Any format works, for example:\n\nTopic 1: Chemical equations\nWhat is ...? | Answer\n1. What is ...? Ans: Answer\nQ. What is ...?\nAns. Answer'} />
       </div>
       <p id="caret-note" className={`caret-note${here.length ? ` ${here.some((x) => x.level === 'error') ? 'error' : 'warn'}` : ''}`} aria-live="polite">
         {here.length
-          ? <><b>Line {caret}:</b> {here.map((x) => x.text).join(' ')}</>
+          ? <span className="swap" key={`l${caret}`}><b>Line {caret}:</b> {here.map((x) => x.text).join(' ')}</span>
           : issues.length
-            ? <><span className="key error">Red</span> lines are left out. <span className="key warn">Amber</span> lines are kept, but check them. Put the cursor on one to see why.</>
-            : ' '}
+            ? <span className="swap" key="hint"><span className="key error">Red</span> lines are left out. <span className="key warn">Amber</span> lines are kept, but check them. Put the cursor on one to see why.</span>
+            : '\u00a0'}
       </p>
     </>
   );

@@ -1,10 +1,26 @@
+import { useEffect, useRef } from 'react';
 import { BOARDS, MAX_NAME, MAX_NO, STATES, SUBJECTS } from '../lib/details';
 import { MAX_ANSWER, MAX_QUESTION } from '../lib/format';
 
 /** How to write questions for this site: for people. (Chatbots get their own instructions in the page's HTML.) */
 export function Guide() {
+  const ref = useRef<HTMLElement>(null);
+  // each card fades up the first time it scrolls into view
+  useEffect(() => {
+    const cards = [...(ref.current?.querySelectorAll<HTMLElement>('.g-card') ?? [])];
+    cards.forEach((c, i) => c.style.setProperty('--d', `${(i % 3) * 70}ms`));
+    if (typeof IntersectionObserver === 'undefined') return cards.forEach((c) => c.classList.add('seen'));
+    const io = new IntersectionObserver((es) => es.forEach((e) => {
+      if (!e.isIntersecting) return;
+      e.target.classList.add('seen');
+      io.unobserve(e.target);
+    }), { rootMargin: '0px 0px -8% 0px' });
+    cards.forEach((c) => io.observe(c));
+    return () => io.disconnect();
+  }, []);
+
   return (
-    <section className="guide" aria-labelledby="guide-h">
+    <section className="guide" id="guide" tabIndex={-1} ref={ref} aria-labelledby="guide-h">
       <h2 id="guide-h">How to write your questions</h2>
 
       <div className="guide-grid">

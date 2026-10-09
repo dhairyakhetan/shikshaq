@@ -1,8 +1,14 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { Row } from '../lib/format';
 
 /** The rows as they will be stored, grouped under a heading for each chapter and topic. */
 export function RowsTable({ rows }: { rows: Row[] }) {
+  // Rows slide in as they are added. On the first render (a paste, the example) they come in one after another,
+  // briefly; later only a newly added row animates, and only once.
+  const first = useRef(true);
+  useEffect(() => { first.current = false; }, []);
+  const delay = (n: number): CSSProperties | undefined => (first.current ? { animationDelay: `${Math.min(n, 16) * 22}ms` } : undefined);
+  let shown = 0;
   const out: ReactNode[] = [];
   let chapter = '';
   let topic = '';
@@ -14,7 +20,7 @@ export function RowsTable({ rows }: { rows: Row[] }) {
       const title = r.chapter || r.chapter_no !== null ? [r.chapter_no !== null && `Chapter ${r.chapter_no}`, r.chapter].filter(Boolean).join(': ') : 'No chapter';
       const meta = [r.board, r.class && `Class ${r.class}`, r.subject].filter(Boolean).join(' · ');
       out.push(
-        <div className="grp ch" key={`c${i}`}>
+        <div className="grp ch enter" style={delay(shown++)} key={`c${i}`}>
           <span>{title}</span>
           <small>{meta}{meta && ' · '}{r.chapter_id ? <code className="rid">{r.chapter_id}</code> : 'no chapter ID yet'}</small>
         </div>,
@@ -25,14 +31,14 @@ export function RowsTable({ rows }: { rows: Row[] }) {
       topic = tp;
       const has = r.topic || r.topic_no !== null;
       out.push(
-        <div className={`grp tp${has ? '' : ' none'}`} key={`t${i}`}>
+        <div className={`grp tp enter${has ? '' : ' none'}`} style={delay(shown++)} key={`t${i}`}>
           <span>{has ? [r.topic_no !== null && `Topic ${r.topic_no}`, r.topic].filter(Boolean).join(': ') : 'No topic'}</span>
           {r.topic_id && <code className="rid">{r.topic_id}</code>}
         </div>,
       );
     }
     out.push(
-      <div className="qrow" key={i}>
+      <div className="qrow enter" style={delay(shown++)} key={i}>
         <span className="n">{r.question_no}</span>
         <span className="q">{r.question}</span>
         <span className="a">{r.answer}</span>

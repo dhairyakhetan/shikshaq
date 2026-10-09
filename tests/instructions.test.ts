@@ -63,7 +63,7 @@ describe('the chatbot instructions agree with the code', () => {
 
   it('name the box and buttons the user really sees', () => {
     for (const label of ['Questions', 'Download CSV', 'Download JSON']) {
-      expect(app).toContain(`>${label}<`);
+      expect(app).toMatch(new RegExp(`>\\s*${label}\\s*<`));
       expect(text).toContain(label);
     }
   });

@@ -17,10 +17,11 @@ code { font-family: var(--mono); background: var(--soft); padding: 1px 6px; bord
 .muted { color: var(--muted); }
 .small { margin: 0; font-size: 14px; }
 
-.top { background: var(--navy); color: #fff; }
+/* the header floats over the page: content scrolls underneath a blurred, slightly see-through bar */
+.top { position: sticky; top: 0; z-index: 20; background: rgba(19, 32, 58, .9); color: #fff; -webkit-backdrop-filter: saturate(160%) blur(14px); backdrop-filter: saturate(160%) blur(14px); }
 .top-in { max-width: 1240px; margin: 0 auto; padding: 14px 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; }
-.top-link { color: #c9d3e6; font-size: 15px; }
-.top-link:hover { color: #fff; }
+.top-link { border: 0; background: none; padding: 6px 2px; color: #c9d3e6; font-size: 15px; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: rgba(201, 211, 230, .4); transition: color 150ms, text-decoration-color 150ms; }
+.top-link:hover { color: #fff; text-decoration-color: #fff; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font: 800 21px/1 var(--display); }
 
 .page { max-width: 1240px; margin: 0 auto; padding: 26px 20px 64px; display: flex; flex-direction: column; gap: 22px; }
@@ -125,7 +126,11 @@ code.id { font-weight: 700; color: var(--ink); letter-spacing: .04em; }
 }
 @media (max-width: 640px) {
   .page { padding: 18px 16px 48px; gap: 16px; }
-  .top-in { padding: 12px 16px; }
+  .top-in { padding: 10px 16px; flex-wrap: nowrap; }
+  .brand { font-size: 18px; gap: 8px; white-space: nowrap; }
+  .brand svg { width: 24px; height: 24px; }
+  .top-link { white-space: nowrap; font-size: 14px; }
+  .wide-only { display: none; }
   .card { padding: 16px; }
   .stack h2 { font-size: 23px; }
   .intro p { font-size: 17px; }
@@ -133,4 +138,92 @@ code.id { font-weight: 700; color: var(--ink); letter-spacing: .04em; }
   .editor textarea, .backdrop-in { font-size: 14px; }
   .guide-grid { grid-template-columns: minmax(0, 1fr); }
   .row .btn { flex: 1 1 auto; }
+}
+
+/* ------------------------------------------------------------------ motion
+   Everything settles without bouncing (no overshoot), presses answer immediately, and only transform and opacity move.
+   With "reduce motion" on, nothing slides or scales: --rise and --press turn off and only short fades remain. */
+:root { --ease: cubic-bezier(.2, .8, .2, 1); --rise: 10px; --press: .97; --pop: .92; interpolate-size: allow-keywords; }
+@media (prefers-reduced-motion: reduce) {
+  :root { --rise: 0px; --press: 1; --pop: 1; }
+}
+@keyframes rise { from { opacity: 0; transform: translateY(var(--rise)); } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes pop { from { opacity: .5; transform: scale(var(--pop)); } }
+@keyframes mark-in { from { text-decoration-color: transparent; background-color: transparent; } }
+
+.page { scroll-margin-top: 80px; }
+.guide, .card { scroll-margin-top: 80px; }
+.guide:focus, .card:focus { outline: none; }
+
+/* arriving: the page on load, rows of the table, messages */
+.enter { animation: rise 420ms var(--ease) both; }
+.rows .enter { animation-duration: 280ms; }
+.field-msg, .issues, .notes { animation: rise 220ms var(--ease) both; }
+.issues li { animation: fade 200ms ease-out both; }
+.swap { display: inline; animation: fade 180ms ease-out both; }
+.pop { display: inline-block; animation: pop 260ms var(--ease) both; }
+.empty { animation: fade 300ms ease-out both; }
+
+/* an underline waits half a second, so a line that is still being typed does not flash red */
+.mark { animation: mark-in 260ms ease-out 450ms both; }
+
+/* pressing gives way at once; colours ease */
+.btn, .toast-btn, .jump { transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 200ms ease, transform 160ms var(--ease); }
+.btn:active:not(:disabled), .toast-btn:active, .jump:active { transform: scale(var(--press)); transition-duration: 60ms; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn.primary:hover:not(:disabled) { box-shadow: 0 6px 18px rgba(31, 79, 209, .28); }
+.btn.is-done, .btn.is-done:hover:not(:disabled) { background: var(--ok); border-color: var(--ok); color: #fff; box-shadow: none; }
+
+/* a button's icon turns into a check mark when its action worked; the button keeps its size */
+.ico { position: relative; display: inline-grid; width: 18px; height: 18px; flex: none; }
+.ico > span { grid-area: 1 / 1; display: grid; place-items: center; transition: opacity 180ms ease, transform 260ms var(--ease); }
+.ico-b { opacity: 0; transform: scale(var(--pop)); }
+.ico.done .ico-a { opacity: 0; transform: scale(var(--pop)); }
+.ico.done .ico-b { opacity: 1; transform: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; padding: 0; }
+
+/* boxes */
+input[type='text'], .editor textarea { transition: border-color 160ms ease, background-color 160ms ease, box-shadow 200ms ease; }
+input[type='text']:focus, .editor textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(31, 79, 209, .14); }
+input.error:focus { box-shadow: 0 0 0 4px rgba(196, 50, 31, .14); border-color: var(--bad); }
+input.warn:focus { box-shadow: 0 0 0 4px rgba(209, 139, 0, .16); border-color: #d18b00; }
+button:focus-visible, textarea:focus-visible, input:focus-visible { outline-offset: 3px; }
+
+/* the table: a row lights up under the pointer */
+.qrow { transition: background-color 160ms ease; }
+.qrow:hover { background: #f7f9fc; }
+
+/* guide cards fade up the first time they scroll into view */
+.g-card { opacity: 0; transform: translateY(calc(var(--rise) * 1.6)); transition: opacity 520ms var(--ease) var(--d, 0ms), transform 520ms var(--ease) var(--d, 0ms), box-shadow 200ms ease; }
+.g-card.seen { opacity: 1; transform: none; }
+.g-card:hover { box-shadow: 0 8px 28px rgba(19, 32, 58, .07); }
+@media print { .g-card { opacity: 1; transform: none; } }
+
+/* the code lists open smoothly where supported (others just open) */
+.g-card details::details-content { height: 0; overflow: clip; transition: height 300ms var(--ease), content-visibility 300ms allow-discrete; }
+.g-card details[open]::details-content { height: auto; }
+.g-card summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.g-card summary::-webkit-details-marker { display: none; }
+.g-card summary::before { content: ''; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform 220ms var(--ease); }
+.g-card details[open] summary::before { transform: rotate(45deg); }
+
+/* floating: "undo" after replacing the text, and on phones a pill pointing to the results */
+.floating { position: fixed; left: 0; right: 0; bottom: max(16px, env(safe-area-inset-bottom)); z-index: 30; display: flex; justify-content: center; pointer-events: none; padding: 0 16px; }
+.floating > * { pointer-events: auto; animation: rise 280ms var(--ease) both; }
+.toast { display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 18px; border-radius: 14px; background: rgba(19, 32, 58, .94); color: #fff; font-size: 15px; box-shadow: 0 10px 30px rgba(19, 32, 58, .3); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.toast-btn { min-height: 40px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--amber); color: var(--navy); font-weight: 700; }
+.toast-btn:hover { background: #ffbe2e; }
+.jump { display: none; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: var(--blue); color: #fff; font-weight: 700; font-size: 15px; box-shadow: 0 10px 28px rgba(31, 79, 209, .35); }
+.jump.has-error { background: var(--bad); box-shadow: 0 10px 28px rgba(196, 50, 31, .3); }
+@media (max-width: 980px) { .jump { display: inline-flex; } }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .mark { animation-delay: 0ms; }
+  .g-card { transition-duration: 200ms; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .top { background: var(--navy); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .toast { background: var(--navy); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
