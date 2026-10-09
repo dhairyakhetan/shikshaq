@@ -11,6 +11,9 @@ Three separate parts, each its own page. They work without each other and share 
 For now the question bank is a demo saved in the browser (`localStorage`); in Shikshaq it will be the database, and
 `useBank` in `src/db.ts` is the only thing that changes.
 
+The pages use Shikshaq's look (its colours, fonts, pill buttons, shadows and motion timings), so they can move into the
+main site without looking out of place.
+
 ## Question formatter (`/`)
 
 Paste questions and answers in any format; get clean rows for the question bank, one row per question:
@@ -57,8 +60,9 @@ The lists live in `src/details.ts`.
   check mark for a moment (same size, so nothing jumps). On a phone, a pill at the bottom points to the results while they are off screen.
   The header link scrolls to the guide without adding anything to the address.
 - **Motion**: the page, table rows (staggered on a paste), messages and guide cards ease in; presses give way at once; underlines fade in after half
-  a second. Nothing overshoots, only transform and opacity animate, and with "reduce motion"
-  switched on only short fades remain. The header is a translucent bar (solid with "reduce transparency").
+  a second. Timings and the easing curve are Shikshaq's; only success moments (a solved puzzle, a new count) pop slightly.
+  Only transform and opacity animate, and with "reduce motion" switched on only short fades remain. The header is a solid
+  pill floating at the top, as on Shikshaq.
 - **How to write your questions**: a guide for people at the bottom of the page (formats, detail lines, good questions, what the
   underlines mean, the IDs, board and subject codes, starting from notes).
 

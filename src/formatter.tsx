@@ -1,10 +1,6 @@
 /** The question formatter: teachers paste questions in any format, check them, and send them for approval or download them. */
 import { Fragment, StrictMode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
-import '@fontsource/atkinson-hyperlegible/latin-400.css';
-import '@fontsource/atkinson-hyperlegible/latin-700.css';
-import '@fontsource/atkinson-hyperlegible-mono/latin-400.css';
-import '@fontsource-variable/bricolage-grotesque/index.css';
 import './styles.css';
 import { checkDetail, DETAIL_KEYS, detailLine, detailsId, LABEL, readDetails, standardDetail, writeDetail, type DetailKey } from './details';
 import { addBatch, COLUMNS, counts, newId, toCSV, toJSON, toTSV, useBank } from './db';

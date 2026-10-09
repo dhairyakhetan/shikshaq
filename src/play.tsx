@@ -5,10 +5,6 @@
  */
 import { StrictMode, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import '@fontsource/atkinson-hyperlegible/latin-400.css';
-import '@fontsource/atkinson-hyperlegible/latin-700.css';
-import '@fontsource/atkinson-hyperlegible-mono/latin-400.css';
-import '@fontsource-variable/bricolage-grotesque/index.css';
 import './styles.css';
 import { addSample, counts, useBank, type BankQuestion } from './db';
 import { GAME_TYPES, makeGame, seedOf, type Game, type GameType, type Item } from './games';

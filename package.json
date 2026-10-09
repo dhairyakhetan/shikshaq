@@ -12,9 +12,9 @@
     "stress": "STRESS=2500 vitest run tests/games-stress.test.ts --silent=false"
   },
   "dependencies": {
-    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
-    "@fontsource/atkinson-hyperlegible": "^5.3.0",
-    "@fontsource/atkinson-hyperlegible-mono": "^5.3.0",
+    "@fontsource-variable/archivo": "^5.3.0",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
