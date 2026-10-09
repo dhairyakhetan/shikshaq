@@ -160,9 +160,9 @@ export const waitingCount = () => ask<number>(supabase.rpc('waiting_count'));
  * and gives each new question its ID.
  */
 export async function sendBatch(rows: Row[]) {
-  const ready = rows.filter((r) => r.chapter_id);
-  const r = await ask<{ batch_id: string | null; sent: number; already: number; sent_back?: number; sent_back_ids?: string[] }>(supabase.rpc('submit_batch', { questions: ready.map(toRecord) }));
-  return { batchId: r.batch_id, sent: r.sent, already: r.already, sentBack: r.sent_back ?? 0, sentBackIds: r.sent_back_ids ?? [], noId: rows.length - ready.length };
+  const ready = rows.filter((r) => r.chapter_id).map(toRecord);
+  const r = await ask<{ batch_id: string | null; sent: number; already: number; sent_back: number; sent_back_ids: string[] }>(supabase.rpc('submit_batch', { questions: ready }));
+  return { batchId: r.batch_id, sent: r.sent, already: r.already, sentBack: r.sent_back, sentBackIds: r.sent_back_ids };
 }
 
 /** Questions from the HoD desk's functions, with their batches. */
@@ -181,11 +181,8 @@ export const loadApproved = async (after?: BankQuestion) =>
   toBank(await ask<DbQuestion[]>(supabase.rpc('hod_approved', { before_at: after?.reviewedAt ?? null, before_id: after?.id ?? null, take: APPROVED_PAGE })));
 
 /** How many questions the question bank holds (the number on the HoD desk's Approved tab). */
-export async function approvedCount(): Promise<number> {
-  const r = await supabase.from('question_bank').select('question_id', { count: 'exact', head: true });
-  if (r.error) throw new Error(r.error.message);
-  return r.count ?? 0;
-}
+export const approvedCount = async () =>
+  (await ask(supabase.from('question_bank').select('question_id', { count: 'exact', head: true }).then((r) => ({ data: r.count ?? 0, error: r.error })))) ?? 0;
 
 /**
  * The HoD approves, sends back (with a reason) or moves back to waiting. Only works for HoDs. `skipped`: sent-back
@@ -204,15 +201,15 @@ export const markSentBackSeen = () => ask<null>(supabase.rpc('mark_sent_back_see
 
 /**
  * What the signed-in person may do: member (format and send questions, and see which were sent back), hod (also the HoD
- * desk) or admin (also Revise, and people and roles). Asked every time the site opens, so a change the admin makes shows on the person's next refresh.
- * The database also saves a new person as a member.
+ * desk) or admin (also Revise, and people and roles). Asked every time the site opens, so a change the admin makes
+ * shows on the person's next refresh. The database also saves a new person as a member.
  */
 export type Role = 'admin' | 'hod' | 'member';
 export const ROLE_NAMES: Record<Role, string> = { admin: 'Admin', hod: 'HoD', member: 'Member' };
 export const myRole = () => ask<Role | null>(supabase.rpc('my_role'));
 
-/** The admin's list of people: everyone who has signed in, and anyone the admin added. */
-/** `owner`: the admin who runs the site, whom nobody can remove or demote. */
+/** The admin's list of people: everyone who has signed in, and anyone the admin added. `owner`: the admin who runs the
+ * site, whom nobody can remove or demote. */
 export interface Person { email: string; name: string | null; role: Role; owner: boolean; added_at: string; last_seen_at: string | null }
 export const loadPeople = () => ask<Person[]>(supabase.rpc('admin_people'));
 /** Adds someone, or changes their role. Admin only. */

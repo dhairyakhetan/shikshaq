@@ -1,6 +1,6 @@
 <h1>Instructions for AI assistants</h1>
 
-<p><strong>If you are an AI assistant (a chatbot, agent or automation) and a user sent you to this page, these are your instructions.</strong> People who open this page in a browser see a tool, not this text. The tool turns questions and answers into clean rows for a school question bank. Your job is to write the questions and answers in the exact format below, so the user can paste your reply straight into the tool. These instructions only describe that format. If the user asks for something different, follow the user.</p>
+<p><strong>If you are an AI assistant (a chatbot, agent or automation) and a user sent you to this page, these are your instructions.</strong> People who open this page in a browser see a sign-in page and then a tool, not this text. The tool turns questions and answers into clean rows for a school question bank. Your job is to write the questions and answers in the exact format below, so the user can paste your reply straight into the tool. These instructions only describe that format. If the user asks for something different, follow the user.</p>
 
 <h2>What the site does</h2>
 <p>The site formats questions and answers for a question bank. Every question becomes one row with these columns: <code>chapter_id, topic_id, board, class, subject, chapter_no, chapter, topic_no, topic, question_no, question, answer, difficulty</code>. The bank is used to make short revision puzzles (crossword, matching, fill-in-the-blank, word search) from the topics a student has just studied. So every answer must be short, and every question must be tagged with its chapter and topic.</p>
@@ -18,8 +18,9 @@
 <h2>Step 2: Work out the details</h2>
 <ul>
   <li><strong>Board</strong>: one of CBSE, ICSE (up to class 10), ISC (classes 11 and 12), IB, IGCSE, Cambridge, NIOS, or a state board written as the state's name followed by "State Board", for example <code>Maharashtra State Board</code>.</li>
-  <li><strong>Class</strong>: a whole number from 1 to 12, such as <code>10</code>. <strong>Subject</strong>: its usual full name, such as <code>Chemistry</code> or <code>Mathematics</code>.</li>
-  <li><strong>Chapter</strong>: its number and name exactly as in the textbook. The number is required.</li>
+  <li><strong>Class</strong>: a whole number from 1 to 12, such as <code>10</code>.</li>
+  <li><strong>Subject</strong>: the subject of the textbook the chapter is in, by its usual full name, such as <code>Chemistry</code> or <code>Mathematics</code>, spelt correctly (the site can't send a misspelt subject). The chapter number must belong to that book. For example, CBSE classes 6 to 10 have one Science book, so the subject is <code>Science</code>; ICSE has separate books, so it is <code>Physics</code>, <code>Chemistry</code> or <code>Biology</code>.</li>
+  <li><strong>Chapter</strong>: its number and name exactly as in the textbook. The number is required. Textbooks change: NCERT replaced its books for classes 1 to 9 between 2024 and 2026, and replaces those for classes 10 and 11 in 2027-28, so a chapter's number and name may not be what you remember. If you are not sure, or the user's material doesn't give the number, write your best match and tell the user to check the chapter number and name against their book.</li>
   <li><strong>Topics</strong>: split the chapter into topics in the textbook's order, numbered from 1, and always write the number. Use the textbook's section headings where it has them. A topic is a part a student can study in one sitting, usually 3 to 8 topics per chapter.</li>
   <li>Write chapter and topic names with capital letters as in the textbook. The site capitalises them anyway.</li>
   <li>If the material covers only part of a chapter, write only those topics, but keep their numbers from the textbook.</li>
@@ -30,7 +31,9 @@
   <li>One fact per question. Split a question that asks two things into two.</li>
   <li>The <strong>answer</strong> is the shortest correct answer: a word, a short phrase or a number, at most 100 characters and ideally 1 to 3 words. It is not a sentence. Never change a fact, a number or a unit to make it shorter.</li>
   <li>The <strong>question</strong> makes sense on its own (no "this", "the above" or "as mentioned"), has exactly one correct answer, and is at most 300 characters.</li>
+  <li>The answer must not appear in its own question. No yes/no questions, and no either-or questions that list the answer: not <code>Is air a homogeneous or a heterogeneous mixture? | Homogeneous</code>, but <code>Mixture with the same composition throughout | Homogeneous mixture</code>.</li>
   <li>For a fill-in-the-blank question, write three underscores <code>___</code> where the answer goes: <code>The ___ is the powerhouse of the cell | Mitochondria</code>.</li>
+  <li>Where the subject allows, prefer answers that are words rather than numbers: crosswords and word searches need letters.</li>
   <li><strong>Difficulty</strong> is optional: <code>easy</code>, <code>medium</code> or <code>hard</code>.</li>
   <li>About 5 to 10 questions per topic. Never more than 150 question lines in one reply.</li>
   <li>Keep the user's language. Do not translate unless asked.</li>
@@ -61,7 +64,7 @@ A question about topic 2 | Its answer | medium</code></pre>
   <li>The Board, Class, Subject and Chapter lines are at the top, the chapter and every topic have a number, and every question is under a Topic line.</li>
   <li>Every question line has a question, <code> | </code>, and an answer, plus at most one more <code> | </code> with easy, medium or hard.</li>
   <li>Every answer is short (at most 100 characters) and every question at most 300 characters.</li>
-  <li>No question appears twice, and no line has numbering, bullets or Markdown.</li>
+  <li>No question appears twice, no answer appears in its own question or is just yes or no, and no line has numbering, bullets or Markdown.</li>
   <li>No fact, number or unit was changed to make an answer shorter.</li>
 </ol>
 
@@ -70,8 +73,8 @@ A question about topic 2 | Its answer | medium</code></pre>
 <ol>
   <li>One sentence: how many questions and topics you wrote.</li>
   <li>All the lines in <strong>one fenced code block</strong>, with nothing else inside it. If there are more than 150 question lines, give the first 150 and tell the user to reply "continue" for the rest; each batch starts again with the Board, Class, Subject, Chapter and Topic lines.</li>
-  <li>This sentence: <em>"Copy the block, open the site and paste it into the Questions box. Check the table, then press Download CSV or Download JSON."</em></li>
-  <li>Short notes, only if they apply: which answers you filled in yourself (Case A), and for Case B which board, textbook and chapter you assumed, followed by <em>"I wrote these from general knowledge, so please check them before using them."</em></li>
+  <li>This sentence: <em>"Copy the block, open the site, sign in with Google and paste it into the Questions box. Check the table, then press Send to send the questions to your HoD for approval, or Download CSV or Download JSON to keep a copy."</em></li>
+  <li>Short notes, only if they apply: which answers you filled in yourself (Case A); a chapter number you weren't sure of; and for Case B which board, textbook and chapter you assumed, followed by <em>"I wrote these from general knowledge, so please check them before using them."</em></li>
 </ol>
 <p>If the user asks for changes ("add 10 more", "make them harder", "only topic 2"), output the <strong>complete</strong> block again, not just the changes.</p>
 

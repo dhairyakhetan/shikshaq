@@ -67,6 +67,19 @@ describe('the chatbot instructions agree with the code', () => {
       expect(app).toMatch(new RegExp(`>\\s*${label}\\s*<`));
       expect(text).toContain(label);
     }
+    expect(app).toContain("'Send'");
+    expect(text).toContain('press Send to send the questions to your HoD');
+    expect(read('src/main.tsx')).toContain('Sign in with Google</button>');
+    expect(text).toContain('sign in with Google');
+  });
+
+  it('follow their own rules: no answer inside its question, and no yes/no answers', () => {
+    for (const id of ['format', 'example']) {
+      for (const r of format(block(id)).rows) {
+        expect(r.question.toLowerCase(), r.question).not.toContain(r.answer.toLowerCase());
+        expect(r.answer).not.toMatch(/^(yes|no)$/i);
+      }
+    }
   });
 });
 

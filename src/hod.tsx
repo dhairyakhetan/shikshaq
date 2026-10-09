@@ -44,6 +44,14 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
   const [approvedTotal, setApprovedTotal] = useState<number | null>(null);
   // approved questions, a page at a time: `last` is the oldest one loaded, `done` when there are no older ones
   const [older, setOlder] = useState<{ started: boolean; loading: boolean; done: boolean; last?: BankQuestion }>({ started: false, loading: false, done: false });
+  const [saveError, setSaveError] = useState('');
+  const [tab, setTab] = useState<Status>('pending');
+  const [back, setBack] = useState<{ where: string; ids: string[] } | null>(null); // the "why?" box that is open
+  const [reason, setReason] = useState('');
+  const [leaving, setLeaving] = useState<Set<string>>(new Set());
+  const [downloading, setDownloading] = useState(false);
+  const { offer, toast } = useUndo();
+
   const recountApproved = useCallback(() => { approvedCount().then(setApprovedTotal, () => {}); }, []);
   /** Loads the waiting and sent-back questions afresh (keeping the old ones on screen until they arrive). */
   const load = useCallback(() => {
@@ -53,14 +61,6 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
     recountApproved();
   }, [recountApproved]);
   useEffect(load, [load]);
-  const [saveError, setSaveError] = useState('');
-  const [tab, setTab] = useState<Status>('pending');
-  const [back, setBack] = useState<{ where: string; ids: string[] } | null>(null); // the "why?" box that is open
-  const [reason, setReason] = useState('');
-  const [leaving, setLeaving] = useState<Set<string>>(new Set());
-  const { offer, toast } = useUndo();
-
-  const [downloading, setDownloading] = useState(false);
 
   /** The next page of approved questions (the first when the Approved tab opens). */
   const loadOlder = () => {
@@ -122,7 +122,7 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
     Promise.all([saveStatus(ids, status, note), left]).then(([r]) => {
       onChange();
       recountApproved();
-      const kept = old.filter((q) => r.skipped?.includes(q.id));
+      const kept = old.filter((q) => r.skipped.includes(q.id));
       if (!kept.length) return;
       setBank((b) => b && restore(b, kept));
       setSaveError(`${plural(kept.length, 'question')} stayed sent back: the same question was sent again and is already waiting or approved.`);

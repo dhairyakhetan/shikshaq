@@ -1,9 +1,9 @@
 /**
  * The profile page: the person's avatar (pick one), name, email and role, a bio, and signing out. The avatar and bio are
  * kept on this device only (localStorage). The bell on the right of the card holds their notifications: every question
- * of theirs the HoD sent back, with the reason. For the admin, a list of people underneath: add someone by email with a role, change anyone's role, or
- * take them off the list. Roles live in the database, and each person's device asks for theirs every time the site
- * opens, so a change shows on their next refresh.
+ * of theirs the HoD sent back, with the reason. For the admin, a list of people underneath: add someone by email with a
+ * role, change anyone's role, or take them off the list. Roles live in the database, and each person's device asks for
+ * theirs every time the site opens, so a change shows on their next refresh.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadPeople, removePerson, ROLE_NAMES, setPersonRole, type Person, type Role, type SentBack } from './db';
@@ -128,7 +128,7 @@ function Bell({ alerts, fresh, focus, active, onSeen, onRetry }: {
 
   return (
     <div className="bell-box" ref={box}>
-      <button type="button" className={`bell-btn${open ? ' on' : ''}`} aria-expanded={open} aria-controls="alerts"
+      <button type="button" className={`bell-btn${open ? ' on' : ''}`} aria-expanded={open} aria-controls={open ? 'alerts' : undefined}
         aria-label={`Notifications${unseen ? `, ${unseen} new` : ''}`} onClick={() => setOpen((o) => !o)}>
         <BellIcon />
         {unseen > 0 && <span className="badge alert pop" key={unseen} aria-hidden="true">{unseen}</span>}
@@ -244,7 +244,7 @@ function People({ me }: { me: string }) {
                 {p.name && <span className="small muted">{p.email}</span>}
                 <span className="small muted">{p.last_seen_at ? `Last here ${when(p.last_seen_at)}` : "Hasn't signed in yet"}</span>
               </div>
-              {p.email === me || p.owner ? <span className={`role-badge ${p.role}`}>{ROLE_NAMES[p.role]} ({p.email === me ? 'you' : 'owner'})</span> : (
+              {p.email === me.toLowerCase() || p.owner ? <span className={`role-badge ${p.role}`}>{ROLE_NAMES[p.role]} ({p.email === me ? 'you' : 'owner'})</span> : (
                 <div className="row">
                   <select aria-label={`Role for ${p.email}`} value={p.role} disabled={busy}
                     onChange={(e) => { const r = e.target.value as Role; change(() => setPersonRole(p.email, r), `${p.name ?? p.email} is now ${ROLE_NAMES[r]}.`); }}>

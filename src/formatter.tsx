@@ -26,10 +26,10 @@ function scrollToEl(el: HTMLElement | null) {
 }
 
 /**
- * `teacher` is the signed-in person's name; `onSent` tells the header to count the waiting questions again;
- * `onSentBack` opens the notifications at questions that were sent back to this person before.
+ * `teacher` is the signed-in person's name; `reviewer` is an HoD or the admin, who can open the HoD desk; `onSent` tells
+ * the header to count the waiting questions again; `onSentBack` opens the notifications at questions that were sent back
+ * to this person before.
  */
-/** `reviewer`: an HoD or the admin, who can open the HoD desk. */
 export function Formatter({ teacher, reviewer, onSent, onSentBack }: { teacher: string; reviewer: boolean; onSent: () => void; onSentBack: (ids: string[]) => void }) {
   const [raw, setRaw] = useState('');
   const [done, setDone] = useState('');

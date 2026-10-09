@@ -139,7 +139,7 @@ a.linkish { color: var(--indigo-deep); }
 .sent-note { margin: 0; font-size: 15px; }
 .sent-note.ok { color: var(--ok-deep); }
 .sent-note.warn { color: var(--brand-deep); }
-.example-warn { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--brand-tint); box-shadow: inset 0 0 0 1px var(--brand); color: var(--brand-deep); font-size: 15px; animation: rise 220ms var(--ease) both; --m: .3; }
+.example-warn { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--brand-tint); box-shadow: inset 0 0 0 1px var(--brand); color: var(--brand-deep); font-size: 15px; }
 
 /* the HoD desk */
 .tabs { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -267,9 +267,6 @@ select { height: 46px; padding: 0 12px; font-size: 16px; font-weight: 500; }
 
 /* the avatar in the header, which opens the profile */
 .me { position: relative; display: inline-grid; place-items: center; width: 40px; height: 40px; margin-left: 4px; border-radius: 12px; transition: transform 150ms ease, box-shadow 200ms ease; }
-/* the number of new notifications, on the avatar */
-.me .badge.alert { position: absolute; top: -5px; right: -7px; min-width: 20px; padding: 0 5px; font-size: 11px; box-shadow: 0 0 0 2px var(--bg); }
-.badge.alert { background: var(--bad); color: #fff; }
 .me .avatar { border-radius: 10px; }
 .me.on { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--ink); }
 .me:active { transform: scale(var(--press)); }
@@ -309,7 +306,9 @@ select { height: 46px; padding: 0 12px; font-size: 16px; font-weight: 500; }
 .bell-btn svg { width: 22px; height: 22px; }
 .bell-btn.on { background: var(--ink); color: var(--bg); box-shadow: none; }
 .bell-btn:active { transform: scale(var(--press)); }
-.bell-btn .badge.alert { position: absolute; top: -6px; right: -6px; min-width: 20px; padding: 0 5px; font-size: 11px; box-shadow: 0 0 0 2px var(--card); }
+/* the number of new notifications, on the avatar in the header and on the bell */
+.badge.alert { background: var(--bad); color: #fff; }
+.me .badge.alert, .bell-btn .badge.alert { position: absolute; top: -6px; right: -6px; min-width: 20px; padding: 0 5px; font-size: 11px; box-shadow: 0 0 0 2px var(--card); }
 .alerts-pop { position: absolute; top: calc(100% + 10px); right: 0; display: flex; flex-direction: column; gap: 12px; width: min(420px, calc(100vw - 64px)); max-height: min(70vh, 540px); overflow-y: auto; overscroll-behavior: contain; padding: 18px; border-radius: 20px; background: var(--card); box-shadow: var(--shadow-bone); transform-origin: top right; animation: drop 220ms var(--ease) both; }
 @keyframes drop { from { opacity: 0; transform: translateY(calc(var(--rise) * -.3)) scale(var(--reveal)); } }
 .alerts-pop h2 { font-size: 20px; }
@@ -346,7 +345,7 @@ select { height: 46px; padding: 0 12px; font-size: 16px; font-weight: 500; }
 .sample { margin: 4px 0 0; padding: 14px 16px; background: var(--soft); border-radius: 12px; font: 400 13.5px/1.6 var(--mono); overflow-x: auto; white-space: pre; color: var(--ink); }
 .rules { margin: 0; display: flex; flex-direction: column; }
 .rules dd { margin: 2px 0 10px; font-size: 15px; color: var(--muted); font-weight: 400; }
-.formats code, .ticks code { overflow-wrap: anywhere; }
+.ticks code { overflow-wrap: anywhere; }
 .id-demo { display: flex; flex-wrap: wrap; gap: 4px; }
 .id-demo span { display: flex; flex-direction: column; align-items: center; padding: 6px 10px; border-radius: 10px; background: var(--soft); font-size: 12px; color: var(--muted); }
 .id-demo b { font: 600 20px/1.2 var(--mono); color: var(--ink); letter-spacing: .02em; }
@@ -421,7 +420,7 @@ select { height: 46px; padding: 0 12px; font-size: 16px; font-weight: 500; }
 /* arriving: the page on load, rows of the table, messages */
 .enter { animation: rise 500ms var(--ease) both; }
 .rows .enter { --m: .4; animation-duration: 300ms; }
-.field-msg, .issues, .notes, .why, .sent-note { --m: .3; animation: rise 220ms var(--ease) both; }
+.field-msg, .issues, .notes, .why, .sent-note, .example-warn { --m: .3; animation: rise 220ms var(--ease) both; }
 /* an approved or sent-back row slides away before it moves to its tab */
 @keyframes leave { to { opacity: 0; transform: translateX(var(--rise)); } }
 .qrow.leaving { animation: leave 220ms var(--ease) forwards; pointer-events: none; }
