@@ -18,16 +18,19 @@ function scrollToEl(el: HTMLElement | null) {
   el.focus({ preventScroll: true });
 }
 
-/** `teacher` is the signed-in person's name; `onSent` tells the header to count the waiting questions again. */
+/**
+ * `teacher` is the signed-in person's name; `onSent` tells the header to count the waiting questions again;
+ * `onSentBack` opens the notifications at questions that were sent back to this person before.
+ */
 /** `reviewer`: an HoD or the admin, who can open the HoD desk. */
-export function Formatter({ teacher, reviewer, onSent }: { teacher: string; reviewer: boolean; onSent: () => void }) {
+export function Formatter({ teacher, reviewer, onSent, onSentBack }: { teacher: string; reviewer: boolean; onSent: () => void; onSentBack: (ids: string[]) => void }) {
   const [raw, setRaw] = useState('');
   const [done, setDone] = useState('');
   const [caret, setCaret] = useState(0);
   /** Bumped when the whole text is replaced (paste, example, clear), so the table plays its entrance again. */
   const [batch, setBatch] = useState(0);
   const { offer, toast } = useUndo();
-  const [sent, setSent] = useState<{ batchId: string | null; sent: number; noId: number; already: number } | null>(null);
+  const [sent, setSent] = useState<Awaited<ReturnType<typeof sendBatch>> | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [resultsInView, setResultsInView] = useState(true);
@@ -245,6 +248,7 @@ export function Formatter({ teacher, reviewer, onSent }: { teacher: string; revi
                 <p className={`sent-note ${sent.sent ? 'ok' : 'warn'}`} key={JSON.stringify(sent)}>
                   {sent.sent ? <>Sent {plural(sent.sent, 'question')} to the HoD as batch <b>{sent.batchId}</b>. </> : 'Nothing new to send. '}
                   {sent.already > 0 && <>{plural(sent.already, 'question was', 'questions were')} already sent, so {sent.already === 1 ? 'it was' : 'they were'} skipped. </>}
+                  {sent.sentBack > 0 && <>{plural(sent.sentBack, 'question was', 'questions were')} sent back to you before and {sent.sentBack === 1 ? "hasn't" : "haven't"} changed, so {sent.sentBack === 1 ? "it wasn't" : "they weren't"} sent again. <button type="button" className="linkish" onClick={() => onSentBack(sent.sentBackIds)}>See why</button> </>}
                   {reviewer && sent.sent > 0 && <Link className="linkish" href="/hod/">Open the HoD desk</Link>}
                 </p>
               )}

@@ -13,19 +13,21 @@
 -- email without proving it).
 --   anyone    reads question_bank (approved questions only), even without signing in; nothing else
 --   member    anyone signed in (saved in public.roles the first time they open the site):
---             submit_batch(questions) sends a batch as themselves
---   hod       also the HoD desk: hod_questions(), waiting_count(), and hod_set_status(ids, new_status, reason) to
---             approve, send back, or move back to waiting
+--             submit_batch(questions) sends a batch as themselves; my_sent_back() and mark_sent_back_seen() are their
+--             notifications: their own questions that were sent back, and why
+--   hod       also the HoD desk: hod_questions() (waiting and sent back), hod_approved() (approved, newest first, a page
+--             at a time), waiting_count(), and hod_set_status(ids, new_status, reason) to approve, send back, or move
+--             back to waiting
 --   admin     the same as an HoD in the database, plus admin_people(), admin_set_role(email, role), admin_remove(email);
---             the site also shows the admin Revise
+--             the site also shows the admin Revise. The owner (roles.owner, set by hand) can't be removed or demoted.
 -- my_role() saves a new person as a member and tells the site their role, every time the site opens.
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
 
--- how two questions are compared: case and extra spaces don't matter
+-- how two questions are compared: case, extra spaces and punctuation at the end don't matter
 create function private.norm(t text) returns text language sql immutable set search_path = ''
-as $$ select lower(regexp_replace(btrim(t), '\s+', ' ', 'g')) $$;
+as $$ select lower(regexp_replace(regexp_replace(btrim(t), '[[:space:]?.!:;,।]+$', ''), '\s+', ' ', 'g')) $$;
 
 -- everyone who has signed in, and anyone the admin added, with their role
 create table public.roles (
@@ -33,8 +35,12 @@ create table public.roles (
   role text not null constraint roles_role_check check (role in ('admin', 'hod', 'member')),
   name text,
   added_at timestamptz not null default now(),
-  last_seen_at timestamptz
+  last_seen_at timestamptz,
+  -- the person who runs the site: an admin nobody can remove or demote. Set once, by hand:
+  --   update public.roles set owner = true where email = '<your email>';
+  owner boolean not null default false check (not owner or role = 'admin')
 );
+create unique index roles_one_owner on public.roles (owner) where owner;
 
 -- the signed-in person's role: admin, hod or member; null when not signed in with Google
 create function private.role() returns text language sql stable security definer set search_path = ''
@@ -69,7 +75,7 @@ as $$
 begin
   if private.role() is distinct from 'admin' then raise exception 'Only the admin can see this.'; end if;
   return coalesce((
-    select jsonb_agg(jsonb_build_object('email', r.email, 'name', r.name, 'role', r.role, 'added_at', r.added_at, 'last_seen_at', r.last_seen_at)
+    select jsonb_agg(jsonb_build_object('email', r.email, 'name', r.name, 'role', r.role, 'owner', r.owner, 'added_at', r.added_at, 'last_seen_at', r.last_seen_at)
                      order by case r.role when 'admin' then 0 when 'hod' then 1 else 2 end, coalesce(r.name, r.email))
     from public.roles r
   ), '[]');
@@ -85,6 +91,9 @@ begin
   if new_role not in ('admin', 'hod', 'member') then raise exception 'Unknown role.'; end if;
   if mail !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then raise exception 'That doesn''t look like an email address.'; end if;
   if mail = lower(auth.jwt() ->> 'email') and new_role <> 'admin' then raise exception 'You can''t take away your own admin role.'; end if;
+  if new_role <> 'admin' and exists (select 1 from public.roles r where r.email = mail and r.owner) then
+    raise exception 'The owner stays an admin.';
+  end if;
   insert into public.roles (email, role) values (mail, new_role) on conflict (email) do update set role = excluded.role;
 end $$;
 
@@ -96,6 +105,7 @@ declare
 begin
   if private.role() is distinct from 'admin' then raise exception 'Only the admin can remove people.'; end if;
   if mail = lower(auth.jwt() ->> 'email') then raise exception 'You can''t remove yourself.'; end if;
+  if exists (select 1 from public.roles r where r.email = mail and r.owner) then raise exception 'The owner can''t be removed.'; end if;
   delete from public.roles where email = mail;
 end $$;
 
@@ -128,6 +138,7 @@ create table public.questions (
   note text not null default '' check (char_length(note) <= 500),
   reviewed_at timestamptz,
   reviewed_by text,
+  seen_at timestamptz,  -- when the teacher saw that it was sent back (their notifications); empty until then
   -- the IDs always agree with the columns
   constraint ids_match check (
     chapter_id ~ ('^[A-Z]{2,5}' || lpad(class::text, 2, '0') || '[A-Z]{3}' || lpad(chapter_no::text, 2, '0') || '$')
@@ -203,7 +214,7 @@ begin
   return new;
 end $$;
 
-create trigger questions_to_bank after insert or update on public.questions
+create trigger questions_to_bank after insert or update of status on public.questions
   for each row execute function private.sync_question_bank();
 
 -- ---------------------------------------------------------------- who can see what
@@ -219,14 +230,55 @@ create policy "Anyone can read the question bank" on public.question_bank for se
 
 -- ---------------------------------------------------------------- what the website calls
 
+-- The board and subject codes the site uses (src/details.ts; tests/formatter.test.ts checks that this list agrees). A
+-- chapter ID must use the code of a known board or subject, and a made-up subject code can't be a known one, so a
+-- question can't be filed under another subject's chapters.
+create function private.codes_match(board text, subject text, chapter_id text) returns boolean language sql immutable set search_path = ''
+as $$
+  with boards(name, code) as (values
+    ('CBSE', 'CBSE'), ('ICSE', 'ICSE'), ('ISC', 'ISC'), ('IB', 'IB'), ('IGCSE', 'IGCSE'), ('Cambridge', 'CAIE'),
+    ('NIOS', 'NIOS'), ('Andhra Pradesh State Board', 'AP'), ('Arunachal Pradesh State Board', 'AR'),
+    ('Assam State Board', 'AS'), ('Bihar State Board', 'BR'), ('Chhattisgarh State Board', 'CG'),
+    ('Delhi State Board', 'DL'), ('Goa State Board', 'GA'), ('Gujarat State Board', 'GJ'),
+    ('Haryana State Board', 'HR'), ('Himachal Pradesh State Board', 'HP'), ('Jammu and Kashmir State Board', 'JK'),
+    ('Jharkhand State Board', 'JH'), ('Karnataka State Board', 'KA'), ('Kerala State Board', 'KL'),
+    ('Madhya Pradesh State Board', 'MP'), ('Maharashtra State Board', 'MH'), ('Manipur State Board', 'MN'),
+    ('Meghalaya State Board', 'ML'), ('Mizoram State Board', 'MZ'), ('Nagaland State Board', 'NL'),
+    ('Odisha State Board', 'OD'), ('Punjab State Board', 'PB'), ('Rajasthan State Board', 'RJ'),
+    ('Sikkim State Board', 'SK'), ('Tamil Nadu State Board', 'TN'), ('Telangana State Board', 'TS'),
+    ('Tripura State Board', 'TR'), ('Uttar Pradesh State Board', 'UP'), ('Uttarakhand State Board', 'UK'),
+    ('West Bengal State Board', 'WB')
+  ), subjects(name, code) as (values
+    ('Physics', 'PHY'), ('Chemistry', 'CHE'), ('Biology', 'BIO'), ('Mathematics', 'MAT'), ('Science', 'SCI'),
+    ('Social Science', 'SST'), ('English', 'ENG'), ('English Language', 'ENL'), ('English Literature', 'ELT'),
+    ('Hindi', 'HIN'), ('Sanskrit', 'SAN'), ('History', 'HIS'), ('Geography', 'GEO'), ('Civics', 'CIV'),
+    ('History and Civics', 'HCV'), ('Political Science', 'POL'), ('Economics', 'ECO'), ('Computer Science', 'CSC'),
+    ('Computer Applications', 'CAP'), ('Informatics Practices', 'INP'), ('Accountancy', 'ACC'),
+    ('Business Studies', 'BST'), ('Commercial Studies', 'COM'), ('Environmental Studies', 'EVS'),
+    ('Environmental Science', 'ENV'), ('Statistics', 'STA'), ('Psychology', 'PSY'), ('Sociology', 'SOC'),
+    ('Physical Education', 'PED'), ('Biotechnology', 'BTE'), ('Home Science', 'HSC'), ('Legal Studies', 'LGS'),
+    ('General Knowledge', 'GKN'), ('French', 'FRE'), ('German', 'GER'), ('Marathi', 'MAR'), ('Bengali', 'BEN'),
+    ('Tamil', 'TAM'), ('Telugu', 'TEL'), ('Kannada', 'KAN'), ('Malayalam', 'MAL'), ('Gujarati', 'GUJ'),
+    ('Punjabi', 'PUN'), ('Urdu', 'URD')
+  ), id as (select regexp_match(chapter_id, '^([A-Z]{2,5})[0-9]{2}([A-Z]{3})[0-9]{2}$') m)
+  select id.m is not null
+     and coalesce((select b.code = id.m[1] from boards b where lower(b.name) = lower(board)), true)
+     and coalesce((select s.code = id.m[2] from subjects s where lower(s.name) = lower(subject)),
+                   not exists (select 1 from subjects s where s.code = id.m[2]))
+  from id
+$$;
+
 -- The formatter sends the signed-in person's questions as one batch. Each needs a chapter ID (the formatter leaves out
--- the ones without). Questions already waiting or approved in the same chapter are skipped. Returns the batch ID, how many
--- were sent and skipped, and the new rows.
+-- the ones without). Questions already waiting or approved in the same chapter are skipped. So is a question that was
+-- sent back to this same person and hasn't changed (same question and answer): it would only be sent back again, so the
+-- site points them to the reason instead. Sent back to someone else, it goes in as new. Returns the batch ID, how many
+-- were sent and skipped, the IDs of the sent-back ones, and the new rows.
 create function public.submit_batch(questions jsonb) returns jsonb
 language plpgsql security definer set search_path = ''
 as $$
 declare
-  who text := coalesce(nullif(btrim(auth.jwt() -> 'user_metadata' ->> 'full_name'), ''), nullif(btrim(auth.jwt() -> 'user_metadata' ->> 'name'), ''), auth.jwt() ->> 'email');
+  -- the name on their Google account; never their email, which would show in the public question bank
+  who text := coalesce(nullif(btrim(auth.jwt() -> 'user_metadata' ->> 'full_name'), ''), nullif(btrim(auth.jwt() -> 'user_metadata' ->> 'name'), ''), 'A teacher');
   mail text := lower(auth.jwt() ->> 'email');
   day text := to_char(now() at time zone 'Asia/Kolkata', 'YYYYMMDD');
   seq int;
@@ -236,10 +288,14 @@ declare
   cid text;
   tno int;
   qtext text;
+  nq text;
   n int;
+  back text[];
   seen text[] := '{}';
   sent int := 0;
   already int := 0;
+  sent_back int := 0;
+  back_ids text[] := '{}';
   added jsonb := '[]';
 begin
   if auth.uid() is null or mail is null then raise exception 'Please sign in first.'; end if;
@@ -257,13 +313,25 @@ begin
     cid := q->>'chapter_id';
     qtext := btrim(q->>'question');
     tno := (q->>'topic_no')::int;
+    nq := private.norm(qtext);
     if cid is null then raise exception 'A question has no chapter ID.'; end if;
-    if cid || '|' || private.norm(qtext) = any(seen)
-       or exists (select 1 from public.questions x where x.chapter_id = cid and private.norm(x.question) = private.norm(qtext) and x.status <> 'rejected') then
+    if not private.codes_match(q->>'board', q->>'subject', cid) then
+      raise exception 'The chapter ID % doesn''t match the board "%" and subject "%". Check their spelling.', cid, q->>'board', q->>'subject';
+    end if;
+    if cid || '|' || nq = any(seen)
+       or exists (select 1 from public.questions x where x.chapter_id = cid and private.norm(x.question) = nq and x.status <> 'rejected') then
       already := already + 1;
       continue;
     end if;
-    seen := seen || (cid || '|' || private.norm(qtext));
+    seen := seen || (cid || '|' || nq);
+    select array_agg(x.question_id) into back from public.questions x join public.batches b on b.batch_id = x.batch_id
+    where x.chapter_id = cid and x.status = 'rejected' and private.norm(x.question) = nq
+      and private.norm(x.answer) = private.norm(q->>'answer') and b.teacher_email = mail;
+    if back is not null then
+      sent_back := sent_back + 1;
+      back_ids := back_ids || back;
+      continue;
+    end if;
     select coalesce(max(x.question_no), 0) + 1 into n from public.questions x where x.chapter_id = cid and x.topic_no is not distinct from tno;
     insert into public.questions (question_id, batch_id, chapter_id, topic_id, board, class, subject, chapter_no, chapter,
                                   topic_no, topic, question_no, question, answer, difficulty)
@@ -279,7 +347,7 @@ begin
     delete from public.batches b where b.batch_id = bid;
     bid := null;
   end if;
-  return jsonb_build_object('batch_id', bid, 'sent', sent, 'already', already, 'questions', added);
+  return jsonb_build_object('batch_id', bid, 'sent', sent, 'already', already, 'sent_back', sent_back, 'sent_back_ids', to_jsonb(back_ids), 'questions', added);
 end $$;
 
 -- The number waiting, next to the HoD desk link. HoDs and the admin only.
@@ -290,14 +358,35 @@ begin
   return (select count(*)::int from public.questions where status = 'pending');
 end $$;
 
--- The HoD desk: every question, with who sent it and when. HoDs and the admin only.
+-- The HoD desk: every question waiting or sent back, with who sent it and when. HoDs and the admin only.
 create function public.hod_questions() returns jsonb language plpgsql stable security definer set search_path = ''
 as $$
 begin
   if not private.is_hod() then raise exception 'Only HoDs can see the HoD desk.'; end if;
   return (
-    select coalesce(jsonb_agg(to_jsonb(q) || jsonb_build_object('teacher', b.teacher, 'sent_at', b.sent_at) order by b.sent_at, q.question_id), '[]')
+    select coalesce(jsonb_agg(to_jsonb(q) || jsonb_build_object('teacher', b.teacher, 'teacher_email', b.teacher_email, 'sent_at', b.sent_at)
+                              order by b.sent_at, q.question_id), '[]')
     from public.questions q join public.batches b on b.batch_id = q.batch_id
+    where q.status <> 'approved'
+  );
+end $$;
+
+-- The HoD desk's approved questions, newest first, a page at a time: the page after (before_at, before_id), the
+-- approval time and ID of the last one already shown. HoDs and the admin only.
+create function public.hod_approved(before_at timestamptz default null, before_id text default null, take int default 200) returns jsonb
+language plpgsql stable security definer set search_path = ''
+as $$
+begin
+  if not private.is_hod() then raise exception 'Only HoDs can see the HoD desk.'; end if;
+  return (
+    select coalesce(jsonb_agg(to_jsonb(q) || jsonb_build_object('teacher', b.teacher, 'teacher_email', b.teacher_email, 'sent_at', b.sent_at)
+                              order by q.reviewed_at desc, q.question_id desc), '[]')
+    from (
+      select * from public.questions x
+      where x.status = 'approved' and (before_at is null or (x.reviewed_at, x.question_id) < (before_at, before_id))
+      order by x.reviewed_at desc, x.question_id desc
+      limit least(greatest(take, 1), 1000)
+    ) q join public.batches b on b.batch_id = q.batch_id
   );
 end $$;
 
@@ -307,28 +396,73 @@ language plpgsql security definer set search_path = ''
 as $$
 declare
   why text := btrim(coalesce(reason, ''));
+  skipped text[] := '{}';
   done jsonb;
 begin
   if not private.is_hod() then raise exception 'Only HoDs can approve or send back questions.'; end if;
   if new_status not in ('pending', 'approved', 'rejected') then raise exception 'Unknown status.'; end if;
   if new_status = 'rejected' and why = '' then raise exception 'Say why the question is going back.'; end if;
+  -- a sent-back question stays sent back while the same question (sent again) is waiting or approved
+  if new_status <> 'rejected' then
+    select coalesce(array_agg(t.question_id), '{}') into skipped
+    from public.questions t
+    where t.question_id = any(ids) and t.status = 'rejected' and (
+      exists (select 1 from public.questions x
+              where x.chapter_id = t.chapter_id and private.norm(x.question) = private.norm(t.question) and x.status <> 'rejected')
+      or exists (select 1 from public.questions u
+                 where u.question_id = any(ids) and u.status = 'rejected' and u.question_id < t.question_id
+                   and u.chapter_id = t.chapter_id and private.norm(u.question) = private.norm(t.question)));
+  end if;
   with changed as (
     update public.questions q
     set status = new_status,
         note = case when new_status = 'rejected' then why else '' end,
         reviewed_at = case when new_status = 'pending' then null else now() end,
-        reviewed_by = case when new_status = 'pending' then null else lower(auth.jwt() ->> 'email') end
-    where q.question_id = any(ids)
-    returning q.question_id, q.status, q.note, q.reviewed_at
+        reviewed_by = case when new_status = 'pending' then null else lower(auth.jwt() ->> 'email') end,
+        seen_at = null
+    where q.question_id = any(ids) and q.question_id <> all(skipped)
+    returning q.question_id
   )
-  select coalesce(jsonb_agg(to_jsonb(changed)), '[]') into done from changed;
-  return done;
+  select coalesce(jsonb_agg(changed.question_id), '[]') into done from changed;
+  return jsonb_build_object('changed', done, 'skipped', to_jsonb(skipped));
 end $$;
 
-revoke execute on function public.submit_batch(text, jsonb), public.waiting_count(), public.hod_questions(),
-  public.hod_set_status(text[], text, text) from public;
+-- Notifications: the signed-in person's questions that were sent back, newest first, with the reason, who sent them
+-- back, whether they have seen it, and whether the same question has since been sent again (waiting or approved).
+create function public.my_sent_back() returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+begin
+  if private.role() is null then raise exception 'Please sign in first.'; end if;
+  return (
+    select coalesce(jsonb_agg(to_jsonb(q) - 'reviewed_by' - 'seen_at' || jsonb_build_object(
+        'sent_at', b.sent_at,
+        'reviewer', coalesce(r.name, 'Your HoD'),
+        'seen', q.seen_at is not null,
+        'now', (select x.status from public.questions x
+                where x.chapter_id = q.chapter_id and private.norm(x.question) = private.norm(q.question) and x.status <> 'rejected'
+                order by x.status = 'approved' desc limit 1))
+      order by q.reviewed_at desc, q.question_id), '[]')
+    from public.questions q
+    join public.batches b on b.batch_id = q.batch_id
+    left join public.roles r on r.email = q.reviewed_by
+    where q.status = 'rejected' and b.teacher_email = lower(auth.jwt() ->> 'email')
+  );
+end $$;
+
+-- The person has seen their notifications.
+create function public.mark_sent_back_seen() returns void language plpgsql security definer set search_path = ''
+as $$
+begin
+  if private.role() is null then raise exception 'Please sign in first.'; end if;
+  update public.questions q set seen_at = now()
+  from public.batches b
+  where b.batch_id = q.batch_id and b.teacher_email = lower(auth.jwt() ->> 'email') and q.status = 'rejected' and q.seen_at is null;
+end $$;
+
 -- everything needs a sign-in; the HoD desk also needs an HoD or admin, people and roles need the admin (checked inside)
-revoke execute on function public.waiting_count(), public.hod_questions(), public.my_role(), public.submit_batch(jsonb),
-  public.hod_set_status(text[], text, text), public.admin_people(), public.admin_set_role(text, text), public.admin_remove(text) from public, anon;
-grant execute on function public.waiting_count(), public.hod_questions(), public.my_role(), public.submit_batch(jsonb),
-  public.hod_set_status(text[], text, text), public.admin_people(), public.admin_set_role(text, text), public.admin_remove(text) to authenticated;
+revoke execute on function public.waiting_count(), public.hod_questions(), public.hod_approved(timestamptz, text, int), public.my_role(),
+  public.submit_batch(jsonb), public.hod_set_status(text[], text, text), public.my_sent_back(), public.mark_sent_back_seen(),
+  public.admin_people(), public.admin_set_role(text, text), public.admin_remove(text) from public, anon;
+grant execute on function public.waiting_count(), public.hod_questions(), public.hod_approved(timestamptz, text, int), public.my_role(),
+  public.submit_batch(jsonb), public.hod_set_status(text[], text, text), public.my_sent_back(), public.mark_sent_back_seen(),
+  public.admin_people(), public.admin_set_role(text, text), public.admin_remove(text) to authenticated;

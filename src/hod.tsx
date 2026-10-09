@@ -1,10 +1,14 @@
 /**
  * The HoD desk: teachers' batches wait here until the HoD approves each question or sends it back with a reason the
- * teacher sees. Approved questions go into the question bank the revision games use. Works on its own: it only reads and
- * writes the database (src/db.ts). Only HoDs and the admin get it, and the database checks that too.
+ * teacher sees in their notifications. Approved questions go into the question bank the revision games use. Works on
+ * its own: it only reads and writes the database (src/db.ts). Only HoDs and the admin get it, and the database checks
+ * that too. Waiting and sent-back questions load at once; approved ones a page at a time, newest first, as they're needed.
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { counts, loadForHod, saveStatus, setStatus, toCSV, toJSON, type Bank, type BankQuestion, type Status } from './db';
+import {
+  APPROVED_PAGE, approvedCount, counts, loadApproved, loadForHod, loadQuestionBank, saveStatus, setStatus, toCSV, toJSON,
+  type Bank, type BankQuestion, type Status,
+} from './db';
 import { CheckIcon, download, DownloadIcon, Link, RowsTable, useUndo } from './ui';
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
@@ -24,16 +28,31 @@ function Gate({ children }: { children: ReactNode }) {
   );
 }
 
+/** Adds questions (and their batches) the page doesn't have yet. */
+const merge = (b: Bank, more: Bank): Bank => {
+  const have = new Set(b.questions.map((q) => q.id));
+  const batches = new Set(b.batches.map((x) => x.id));
+  return { batches: [...b.batches, ...more.batches.filter((x) => !batches.has(x.id))], questions: [...b.questions, ...more.questions.filter((q) => !have.has(q.id))] };
+};
+/** Puts these questions back as they were. */
+const restore = (b: Bank, qs: BankQuestion[]): Bank => ({ ...b, questions: b.questions.map((q) => qs.find((o) => o.id === q.id) ?? q) });
+
 /** `onChange` recounts the header's number. */
 export function HodDesk({ onChange }: { onChange: () => void }) {
-  const [loaded, setLoaded] = useState<{ data?: Bank; error?: string }>({});
+  const [bank, setBank] = useState<Bank | null>(null); // the page's copy: waiting, sent back, and the approved pages loaded
+  const [error, setError] = useState('');
+  const [approvedTotal, setApprovedTotal] = useState<number | null>(null);
+  // approved questions, a page at a time: `last` is the oldest one loaded, `done` when there are no older ones
+  const [older, setOlder] = useState<{ started: boolean; loading: boolean; done: boolean; last?: BankQuestion }>({ started: false, loading: false, done: false });
+  const recountApproved = useCallback(() => { approvedCount().then(setApprovedTotal, () => {}); }, []);
+  /** Loads the waiting and sent-back questions afresh (keeping the old ones on screen until they arrive). */
   const load = useCallback(() => {
-    setLoaded((l) => ({ data: l.data }));
-    loadForHod().then((data) => setLoaded({ data }), (e: Error) => setLoaded((l) => ({ data: l.data, error: e.message })));
-  }, []);
+    setError('');
+    // the approved pages start again once the new list is in
+    loadForHod().then((b) => { setBank(b); setOlder({ started: false, loading: false, done: false }); }, (e: Error) => setError(e.message));
+    recountApproved();
+  }, [recountApproved]);
   useEffect(load, [load]);
-  const [edited, setBank] = useState<Bank | null>(null); // the page's copy once the HoD changes something
-  const bank = edited ?? loaded.data;
   const [saveError, setSaveError] = useState('');
   const [tab, setTab] = useState<Status>('pending');
   const [back, setBack] = useState<{ where: string; ids: string[] } | null>(null); // the "why?" box that is open
@@ -41,19 +60,42 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
   const { offer, toast } = useUndo();
 
+  const [downloading, setDownloading] = useState(false);
+
+  /** The next page of approved questions (the first when the Approved tab opens). */
+  const loadOlder = () => {
+    setOlder((o) => ({ ...o, started: true, loading: true }));
+    loadApproved(older.last).then((page) => {
+      setBank((b) => b && merge(b, page));
+      setOlder({ started: true, loading: false, done: page.questions.length < APPROVED_PAGE, last: page.questions.at(-1) ?? older.last });
+    }, (e: Error) => {
+      setOlder((o) => ({ ...o, loading: false }));
+      setSaveError(`Couldn't load the approved questions: ${e.message}`);
+    });
+  };
+  useEffect(() => { if (tab === 'approved' && bank && !older.started) loadOlder(); });
+
   /** When a save fails, say so and show what the database really holds. */
   const failed = (e: unknown) => {
     setSaveError(`That change wasn't saved: ${(e as Error).message}`);
-    loadForHod().then(setBank, () => {});
+    load();
   };
   const refresh = () => { setBank(null); load(); };
+  /** The whole question bank as a file, straight from the database. */
+  const downloadBank = (csv: boolean) => {
+    setDownloading(true);
+    loadQuestionBank()
+      .then((rows) => (csv ? download('approved-questions.csv', toCSV(rows), 'text/csv') : download('approved-questions.json', toJSON(rows), 'application/json')),
+        (e: Error) => setSaveError(`Couldn't download the question bank: ${e.message}`))
+      .finally(() => setDownloading(false));
+  };
 
   if (!bank) {
     return (
       <Gate>
-        {loaded.error ? (
+        {error ? (
           <>
-            <p><b>Couldn't load the questions.</b> {loaded.error}</p>
+            <p><b>Couldn't load the questions.</b> {error}</p>
             <button type="button" className="btn primary" onClick={refresh}>Try again</button>
           </>
         ) : <p>Loading the questions…</p>}
@@ -61,7 +103,7 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
     );
   }
 
-  const c = counts(bank);
+  const c = { ...counts(bank), approved: approvedTotal ?? counts(bank).approved };
 
   /** Rows fade out, then move, and the change is saved; every action can be undone for a few seconds. */
   const act = (ids: string[], status: Status, note = '') => {
@@ -75,14 +117,23 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
       setBank((b) => setStatus(b ?? before, ids, status, note, new Date().toISOString()));
       setLeaving(new Set());
     }, 220);
-    saveStatus(ids, status, note).then(onChange, failed);
+    // after the row has left: questions that stayed sent back (the same question was sent again) come back
+    const left = new Promise((done) => setTimeout(done, 240));
+    Promise.all([saveStatus(ids, status, note), left]).then(([r]) => {
+      onChange();
+      recountApproved();
+      const kept = old.filter((q) => r.skipped?.includes(q.id));
+      if (!kept.length) return;
+      setBank((b) => b && restore(b, kept));
+      setSaveError(`${plural(kept.length, 'question')} stayed sent back: the same question was sent again and is already waiting or approved.`);
+    }, failed);
     const did = status === 'approved' ? 'approved' : status === 'rejected' ? 'sent back' : 'moved to waiting';
     offer(`${plural(ids.length, 'question')} ${did}`, () => {
       setBank(before);
       // put each question back as it was (questions sent back keep their own reason)
       const groups = new Map<string, BankQuestion[]>();
       for (const q of old) groups.set(`${q.status}\u0000${q.note}`, [...(groups.get(`${q.status}\u0000${q.note}`) ?? []), q]);
-      Promise.all([...groups.values()].map((qs) => saveStatus(qs.map((q) => q.id), qs[0].status, qs[0].note))).then(onChange, failed);
+      Promise.all([...groups.values()].map((qs) => saveStatus(qs.map((q) => q.id), qs[0].status, qs[0].note))).then(() => { onChange(); recountApproved(); }, failed);
     });
   };
 
@@ -121,7 +172,7 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
   const byBatch = bank.batches
     .map((b) => ({ b, qs: shown.filter((q) => q.batch === b.id) }))
     .filter((x) => x.qs.length)
-    .reverse(); // newest first
+    .sort((x, y) => y.b.at.localeCompare(x.b.at)); // newest first
 
   return (
     <main className="page review">
@@ -144,7 +195,7 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
           <div className="batch-head">
             <div>
               <h2>{plural(qs.length, 'question')} from {b.by}</h2>
-              <p className="small muted">Sent {when(b.at)}</p>
+              <p className="small muted">Sent {when(b.at)}{b.email && ` · ${b.email}`}</p>
             </div>
             {back?.where !== `batch:${b.id}` && (
               <div className="row">
@@ -170,17 +221,24 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
         <section className="card stack enter">
           {tab === 'approved' && (
             <div className="batch-head">
-              <p className="small muted">This is the question bank: what the games use.</p>
+              <p className="small muted">This is the question bank: what the games use. Newest first.</p>
               <div className="row">
-                <button type="button" className="btn small primary" onClick={() => download('approved-questions.csv', toCSV(shown), 'text/csv')}><DownloadIcon /> Download CSV</button>
-                <button type="button" className="btn small" onClick={() => download('approved-questions.json', toJSON(shown), 'application/json')}><DownloadIcon /> Download JSON</button>
+                <button type="button" className="btn small primary" disabled={downloading} onClick={() => downloadBank(true)}><DownloadIcon /> Download CSV</button>
+                <button type="button" className="btn small" disabled={downloading} onClick={() => downloadBank(false)}><DownloadIcon /> Download JSON</button>
               </div>
             </div>
           )}
           <RowsTable rows={[...shown].sort((x, y) => (x.chapter_id ?? '').localeCompare(y.chapter_id ?? '') || (x.topic_no ?? 0) - (y.topic_no ?? 0) || x.question_no - y.question_no)} keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} />
+          {tab === 'approved' && !older.done && (
+            <button type="button" className="btn quiet" disabled={older.loading} onClick={loadOlder}>{older.loading ? 'Loading…' : 'Show older approved questions'}</button>
+          )}
         </section>
       ) : (
-        <div className="empty-state enter"><p>{tab === 'approved' ? 'No approved questions yet.' : 'Nothing has been sent back.'}</p></div>
+        <div className="empty-state enter">
+          {tab === 'rejected' || older.done ? <p>{tab === 'approved' ? 'No approved questions yet.' : 'Nothing has been sent back.'}</p>
+            : older.loading || !older.started ? <p>Loading the approved questions…</p>
+            : <button type="button" className="btn primary" onClick={loadOlder}>Try again</button>}
+        </div>
       ))}
 
       <div className="floating" aria-live="polite">{toast}</div>

@@ -265,7 +265,10 @@ select { height: 46px; padding: 0 12px; font-size: 16px; font-weight: 500; }
 .signin-card .btn { width: 100%; margin-top: 6px; }
 
 /* the avatar in the header, which opens the profile */
-.me { display: inline-grid; place-items: center; width: 40px; height: 40px; margin-left: 4px; border-radius: 12px; transition: transform 150ms ease, box-shadow 200ms ease; }
+.me { position: relative; display: inline-grid; place-items: center; width: 40px; height: 40px; margin-left: 4px; border-radius: 12px; transition: transform 150ms ease, box-shadow 200ms ease; }
+/* the number of new notifications, on the avatar */
+.me .badge.alert { position: absolute; top: -5px; right: -7px; min-width: 20px; padding: 0 5px; font-size: 11px; box-shadow: 0 0 0 2px var(--bg); }
+.badge.alert { background: var(--bad); color: #fff; }
 .me .avatar { border-radius: 10px; }
 .me.on { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--ink); }
 .me:active { transform: scale(var(--press)); }
@@ -296,6 +299,16 @@ select { height: 46px; padding: 0 12px; font-size: 16px; font-weight: 500; }
 .person .who { display: flex; flex-direction: column; min-width: 0; }
 .person .who b { overflow-wrap: anywhere; }
 .person select { width: auto; height: 40px; }
+
+/* notifications: questions that were sent back */
+.alerts-head { display: flex; align-items: flex-start; gap: 14px; }
+.alerts-head h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 22px; }
+.alerts-head .small { margin-top: 6px; }
+.bell { display: grid; flex: none; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: var(--brand-tint); color: var(--brand-deep); }
+.bell svg { width: 22px; height: 22px; }
+.alerts .qrow.flash { background: var(--brand-tint); }
+.alerts .acts .small { margin: 0; }
+.tag { display: inline-block; margin-right: 8px; padding: 0 8px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; }
 @media (hover: hover) {
   .me:hover, .avatar-btn:not(.on):hover { transform: translateY(-2px); }
 }

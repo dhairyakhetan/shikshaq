@@ -12,8 +12,10 @@ All questions live in a Supabase database: every question sent, waiting, approve
 `question_bank` table of the approved ones. The tables, rules and functions are in `supabase/schema.sql`. Nothing is kept
 in the browser, and there is no sample data: when the bank is empty, the pages say so. Anyone can read the approved questions in `question_bank`; nothing else can be read without signing in. Teachers sign in with Google to send questions, and only HoDs and admins can open the HoD desk and approve.
 
-The pages use Shikshaq's look (its colours, fonts, pill buttons, shadows and motion timings), so they can move into the
-main site without looking out of place.
+The pages use Shikshaq's look (its colours, fonts, pill buttons, shadows and motion timings). This is a standalone site.
+
+Each person's profile has **notifications**: every question of theirs the HoD sent back, with the reason. The number of
+new ones shows on their avatar at the top of every page.
 
 ## Question formatter (`/`)
 
@@ -70,9 +72,11 @@ The lists live in `src/details.ts`.
 ## HoD desk (`/hod/`)
 
 Teachers press **Send for approval** (with their name) on the formatter. On the HoD desk the HoD sees each batch,
-grouped by chapter and topic, and approves questions or sends them back with a reason the teacher sees, one by one or the
-whole batch; every action can be undone. **Approved** is the question bank the games use, and downloads as CSV or JSON.
-A question with no chapter ID can't be sent, and one already waiting or approved isn't sent twice. Each question gets an
+grouped by chapter and topic, and approves questions or sends them back with a reason the teacher sees in their
+notifications, one by one or the whole batch; every action can be undone. **Approved** is the question bank the games
+use (newest first, a page at a time), and downloads as CSV or JSON. A question with no chapter ID can't be sent, and one
+already waiting or approved isn't sent twice. If a teacher sends a question that was sent back to them, unchanged, it
+isn't sent: the formatter links to the reason instead. Each question gets an
 ID that says what it is, such as `CBSE10SCI01T02Q003` (chapter, topic 2, question 3), and each batch one such as
 `B20261009-03` (the 3rd batch sent that day).
 

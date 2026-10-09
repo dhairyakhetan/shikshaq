@@ -11,6 +11,7 @@ export const CheckIcon = () => <svg {...base} strokeWidth={2.8}><path d="M5 12.5
 export const SendIcon = () => <svg {...base}><path d="M4 12h15M13 6l6 6-6 6" /></svg>;
 export const SignOutIcon = () => <svg {...base}><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" /></svg>;
 export const ArrowDownIcon = () => <svg {...base}><path d="M12 5v14M6 13l6 6 6-6" /></svg>;
+export const BellIcon = () => <svg {...base}><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 21h4" /></svg>;
 
 /** Saves text as a file on the person's device. */
 export function download(name: string, text: string, mime: string) {
@@ -158,9 +159,9 @@ export function Link({ href, className, children, ...rest }: { href: string; cla
 /**
  * The header: on the left the part's name and anything that belongs to that part only (`left`), so the links on the
  * right never move when the part changes; on the right the parts this person may open, the number waiting, and their
- * avatar, which opens their profile.
+ * avatar, which opens their profile, with the number of new notifications (`alerts`) on it.
  */
-export function SectionHeader({ here, pages, waiting = 0, name, avatar, left }: { here: Section; pages: Section[]; waiting?: number; name: string; avatar: number; left?: ReactNode }) {
+export function SectionHeader({ here, pages, waiting = 0, alerts = 0, name, avatar, left }: { here: Section; pages: Section[]; waiting?: number; alerts?: number; name: string; avatar: number; left?: ReactNode }) {
   return (
     <header className="top">
       <div className="top-in">
@@ -174,8 +175,10 @@ export function SectionHeader({ here, pages, waiting = 0, name, avatar, left }: 
               {s.link}{s.key === 'hod' && waiting > 0 && <span className="badge pop" key={waiting}>{waiting}</span>}
             </Link>
           ))}
-          <Link href="/profile/" className={`me${here === 'profile' ? ' on' : ''}`} aria-current={here === 'profile' ? 'page' : undefined} aria-label={`Your profile (${name})`}>
+          <Link href="/profile/" className={`me${here === 'profile' ? ' on' : ''}`} aria-current={here === 'profile' ? 'page' : undefined}
+            aria-label={`Your profile (${name})${alerts ? `, ${alerts} new ${alerts === 1 ? 'notification' : 'notifications'}` : ''}`}>
             <Avatar n={avatar} />
+            {alerts > 0 && <span className="badge alert pop" key={alerts} aria-hidden="true">{alerts}</span>}
           </Link>
         </nav>
       </div>

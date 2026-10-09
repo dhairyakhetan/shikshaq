@@ -1,7 +1,7 @@
 /**
  * The database, shared by the three parts and by nothing else:
  *   the question formatter sends questions into it, to wait for approval;
- *   the HoD desk approves them or sends them back;
+ *   the HoD desk approves them or sends them back (and the teacher sees why, in the notifications on their profile);
  *   the revision games read only the approved ones (the question_bank table).
  * None of the three uses another's code; they only agree on the shapes below and talk to the same database.
  *
@@ -73,7 +73,7 @@ export const toTSV = (rows: Row[]) => table(rows, '\t', (v) => v.replace(/\t/g, 
 
 export type Status = 'pending' | 'approved' | 'rejected';
 /** A teacher's batch. `id` is its batch ID, such as B20261009-03 (the 3rd batch sent that day). */
-export interface Batch { id: string; by: string; at: string }
+export interface Batch { id: string; by: string; email: string; at: string }
 /** A question in the bank. `id` is its question ID, such as CBSE10SCI01T02Q003 (chapter, topic 02, question 003). */
 export interface BankQuestion extends Row { id: string; batch: string; status: Status; note: string; reviewedAt: string | null }
 export interface Bank { batches: Batch[]; questions: BankQuestion[] }
@@ -97,8 +97,8 @@ export const counts = (bank: Bank): Record<Status, number> => ({
 
 /**
  * Supabase, with the project's publishable key, which is made to be public: the database's own rules decide what each
- * person may do. Everything needs a Google sign-in. Anyone signed in can read and send questions; approving and sending
- * back need an HoD or the admin (an email in the database's roles table).
+ * person may do. Anyone can read the approved questions; sending needs a Google sign-in, and the HoD desk needs an HoD
+ * or an admin (the database's roles table).
  */
 const PROJECT = 'https://dfytzracuyiitlqeqszm.supabase.co';
 const KEY = 'sb_publishable__njgrg5F1tWacX_O6uSJNA_jSE1ucYg';
@@ -133,7 +133,7 @@ async function ask<T>(call: PromiseLike<{ data: T | null; error: { message: stri
 /** A row from the questions or question_bank table, with the batch's teacher and date where there is one. */
 interface DbQuestion extends Omit<Row, 'line'> {
   question_id: string; batch_id?: string; status?: Status; note?: string; reviewed_at?: string | null;
-  approved_at?: string; teacher?: string; sent_at?: string;
+  approved_at?: string; teacher?: string; teacher_email?: string | null; sent_at?: string;
 }
 const fromDb = (r: DbQuestion): BankQuestion => ({
   ...r, line: 0, id: r.question_id, batch: r.batch_id ?? '', status: r.status ?? 'approved', note: r.note ?? '', reviewedAt: r.reviewed_at ?? r.approved_at ?? null,
@@ -156,29 +156,55 @@ export const waitingCount = () => ask<number>(supabase.rpc('waiting_count'));
 /**
  * The formatter sends the signed-in person's questions to wait for the HoD, as one batch. Questions with no chapter ID
  * can't be linked to a chapter, so they aren't sent; the database skips any already waiting or approved in the same
- * chapter, and gives each new question its ID.
+ * chapter, and any that were sent back to this person and haven't changed (`sentBackIds`: the notifications to show),
+ * and gives each new question its ID.
  */
 export async function sendBatch(rows: Row[]) {
   const ready = rows.filter((r) => r.chapter_id);
-  const r = await ask<{ batch_id: string | null; sent: number; already: number }>(supabase.rpc('submit_batch', { questions: ready.map(toRecord) }));
-  return { batchId: r.batch_id, sent: r.sent, already: r.already, noId: rows.length - ready.length };
+  const r = await ask<{ batch_id: string | null; sent: number; already: number; sent_back?: number; sent_back_ids?: string[] }>(supabase.rpc('submit_batch', { questions: ready.map(toRecord) }));
+  return { batchId: r.batch_id, sent: r.sent, already: r.already, sentBack: r.sent_back ?? 0, sentBackIds: r.sent_back_ids ?? [], noId: rows.length - ready.length };
 }
 
-/** The HoD desk: every question, with its batch. HoDs and the admin only. */
-export async function loadForHod(): Promise<Bank> {
-  const rows = await ask<DbQuestion[]>(supabase.rpc('hod_questions'));
+/** Questions from the HoD desk's functions, with their batches. */
+function toBank(rows: DbQuestion[]): Bank {
   const batches = new Map<string, Batch>();
-  for (const r of rows) if (r.batch_id && !batches.has(r.batch_id)) batches.set(r.batch_id, { id: r.batch_id, by: r.teacher ?? '', at: r.sent_at ?? '' });
+  for (const r of rows) if (r.batch_id && !batches.has(r.batch_id)) batches.set(r.batch_id, { id: r.batch_id, by: r.teacher ?? '', email: r.teacher_email ?? '', at: r.sent_at ?? '' });
   return { batches: [...batches.values()], questions: rows.map(fromDb) };
 }
 
-/** The HoD approves, sends back (with a reason) or moves back to waiting. Only works for HoDs. */
-export const saveStatus = (ids: string[], status: Status, reason = '') =>
-  ask<{ question_id: string }[]>(supabase.rpc('hod_set_status', { ids, new_status: status, reason }));
+/** The HoD desk: every question waiting or sent back, with its batch. HoDs and the admin only. */
+export const loadForHod = async () => toBank(await ask<DbQuestion[]>(supabase.rpc('hod_questions')));
+
+/** The HoD desk's approved questions, newest first, `APPROVED_PAGE` at a time: the ones approved before `after`. */
+export const APPROVED_PAGE = 200;
+export const loadApproved = async (after?: BankQuestion) =>
+  toBank(await ask<DbQuestion[]>(supabase.rpc('hod_approved', { before_at: after?.reviewedAt ?? null, before_id: after?.id ?? null, take: APPROVED_PAGE })));
+
+/** How many questions the question bank holds (the number on the HoD desk's Approved tab). */
+export async function approvedCount(): Promise<number> {
+  const r = await supabase.from('question_bank').select('question_id', { count: 'exact', head: true });
+  if (r.error) throw new Error(r.error.message);
+  return r.count ?? 0;
+}
 
 /**
- * What the signed-in person may do: member (format and send questions), hod (also the HoD desk) or admin (also Revise,
- * and people and roles). Asked every time the site opens, so a change the admin makes shows on the person's next refresh.
+ * The HoD approves, sends back (with a reason) or moves back to waiting. Only works for HoDs. `skipped`: sent-back
+ * questions that stayed sent back, because the same question was sent again and is already waiting or approved.
+ */
+export const saveStatus = (ids: string[], status: Status, reason = '') =>
+  ask<{ changed: string[]; skipped: string[] }>(supabase.rpc('hod_set_status', { ids, new_status: status, reason }));
+
+/** A notification: one of the person's questions that was sent back, with why (`note`) and by whom. */
+export interface SentBack extends BankQuestion { reviewer: string; seen: boolean; now: 'pending' | 'approved' | null }
+/** The signed-in person's questions that were sent back, newest first. */
+export const mySentBack = async () => (await ask<(DbQuestion & { reviewer: string; seen: boolean; now: SentBack['now'] })[]>(supabase.rpc('my_sent_back')))
+  .map((r): SentBack => ({ ...fromDb(r), reviewer: r.reviewer, seen: r.seen, now: r.now }));
+/** The person has seen their notifications. */
+export const markSentBackSeen = () => ask<null>(supabase.rpc('mark_sent_back_seen'));
+
+/**
+ * What the signed-in person may do: member (format and send questions, and see which were sent back), hod (also the HoD
+ * desk) or admin (also Revise, and people and roles). Asked every time the site opens, so a change the admin makes shows on the person's next refresh.
  * The database also saves a new person as a member.
  */
 export type Role = 'admin' | 'hod' | 'member';
@@ -186,7 +212,8 @@ export const ROLE_NAMES: Record<Role, string> = { admin: 'Admin', hod: 'HoD', me
 export const myRole = () => ask<Role | null>(supabase.rpc('my_role'));
 
 /** The admin's list of people: everyone who has signed in, and anyone the admin added. */
-export interface Person { email: string; name: string | null; role: Role; added_at: string; last_seen_at: string | null }
+/** `owner`: the admin who runs the site, whom nobody can remove or demote. */
+export interface Person { email: string; name: string | null; role: Role; owner: boolean; added_at: string; last_seen_at: string | null }
 export const loadPeople = () => ask<Person[]>(supabase.rpc('admin_people'));
 /** Adds someone, or changes their role. Admin only. */
 export const setPersonRole = (email: string, role: Role) => ask<null>(supabase.rpc('admin_set_role', { person: email, new_role: role }));

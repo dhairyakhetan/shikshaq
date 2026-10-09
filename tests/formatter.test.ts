@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   BOARDS, chapterId, checkBoard, checkClass, checkDetail, checkSubject, detailsId, parseNumbered, readDetails, readMeta, standardDetail,
@@ -397,7 +398,7 @@ describe('the question bank (behind the HoD desk)', () => {
 
   it('approves, sends back with a reason, and moves back to waiting, on the page\'s copy', () => {
     const bank: Bank = {
-      batches: [{ id: 'B20261009-01', by: 'A', at }],
+      batches: [{ id: 'B20261009-01', by: 'A', email: '', at }],
       questions: format(EXAMPLE).rows.map((r, i) => ({ ...r, id: `q${i}`, batch: 'B20261009-01', status: 'pending', note: '', reviewedAt: null })),
     };
     const [a, b, c] = bank.questions.map((q) => q.id);
@@ -409,5 +410,17 @@ describe('the question bank (behind the HoD desk)', () => {
     const back = setStatus(next, [c], 'pending', '', at);
     expect(back.questions.find((q) => q.id === c)).toMatchObject({ status: 'pending', note: '', reviewedAt: null });
     expect(bank.questions.every((q) => q.status === 'pending')).toBe(true); // the original is untouched (so undo works)
+  });
+});
+
+describe('the database knows the same codes (supabase/schema.sql)', () => {
+  it('lists every board and subject with the code the site gives it', () => {
+    const sql = readFileSync('supabase/schema.sql', 'utf8');
+    const list = (name: string) => {
+      const m = sql.match(new RegExp(`${name}\\(name, code\\) as \\(values([\\s\\S]*?)\\n  \\)`));
+      return [...(m?.[1] ?? '').matchAll(/\('((?:[^']|'')+)', '([A-Z]+)'\)/g)].map((x) => `${x[1].replace(/''/g, "'")}=${x[2]}`);
+    };
+    expect(list('boards')).toEqual([...BOARDS.map((b) => `${b.name}=${b.code}`), ...STATES.map((s) => `${s.name} State Board=${s.code}`)]);
+    expect(list('subjects')).toEqual(SUBJECTS.map((s) => `${s.name}=${s.code}`));
   });
 });

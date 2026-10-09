@@ -3,16 +3,17 @@
  * (and saves a new person as a member): everyone signed in gets the formatter and their profile; HoDs and admins also get
  * the HoD desk; only admins get Revise, whose games are downloaded only when it is opened.
  * Moving between the parts doesn't reload the page: the header stays and the parts crossfade. A part stays open once
- * visited, so its text, puzzle or list is still there on the way back.
+ * visited, so its text, puzzle or list is still there on the way back. The person's notifications (their questions
+ * that were sent back) are loaded here too: the number of new ones shows on their avatar, and the list on their profile.
  */
 import { lazy, StrictMode, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
-import { myRole, nameOf, signIn, signOut, useSession, waitingCount, type Role } from './db';
+import { markSentBackSeen, myRole, mySentBack, nameOf, signIn, signOut, useSession, waitingCount, type Role, type SentBack } from './db';
 import { Formatter } from './formatter';
 import { HodDesk } from './hod';
 import { ProfilePage, useProfile } from './profile';
-import { GoogleIcon, Logo, SectionHeader, useRoute, type Section } from './ui';
+import { go, GoogleIcon, Logo, SectionHeader, useRoute, type Section } from './ui';
 
 /** Scrolls down to the guide at the bottom of the formatter, without adding "#..." to the address. */
 function toGuide() {
@@ -41,6 +42,12 @@ function App() {
   const path = useRoute();
   const [profile, setProfile] = useProfile(session?.user.email ?? '');
   const [opened, setOpened] = useState<Set<Section>>(new Set());
+  // notifications: loaded once signed in, again whenever the profile opens (which marks them seen)
+  const [alerts, setAlerts] = useState<SentBack[] | null>(null);
+  const [fresh, setFresh] = useState<Set<string>>(new Set()); // the ones that were new when the profile opened
+  const [focus, setFocus] = useState<{ ids: string[]; n: number } | null>(null); // what the profile scrolls to
+  /** Opens the notifications, at these questions (the formatter's "See why"). */
+  const showSentBack = useCallback((ids: string[]) => { setFocus({ ids, n: Date.now() }); go('/profile/'); }, []);
 
   const pages: Section[] = role.role === 'admin' ? ['formatter', 'hod', 'play'] : reviewer ? ['formatter', 'hod'] : ['formatter'];
   const wanted = partOf(path);
@@ -50,6 +57,23 @@ function App() {
     if (here !== wanted) history.replaceState(null, '', '/'); // a part this person can't open
     setOpened((o) => (o.has(here) ? o : new Set(o).add(here)));
   }, [here, wanted, role.role]);
+  const onProfile = here === 'profile';
+  useEffect(() => {
+    if (!onProfile) { setFresh((f) => (f.size ? new Set() : f)); setFocus(null); }
+    if (!role.role) { setAlerts(null); return; }
+    let current = true; // a later load wins
+    mySentBack().then((list) => {
+      if (!current) return;
+      if (!onProfile) { setAlerts(list); return; }
+      const unseen = list.filter((a) => !a.seen).map((a) => a.id);
+      setAlerts(list.map((a) => ({ ...a, seen: true })));
+      if (!unseen.length) return;
+      setFresh(new Set(unseen));
+      setFocus((f) => f ?? { ids: [], n: Date.now() });
+      markSentBackSeen().catch(() => {});
+    }, () => {});
+    return () => { current = false; };
+  }, [role.role, onProfile]);
 
   if (session === undefined || (session && !role.role && !role.error)) return <div className="splash" aria-busy="true"><Logo /></div>;
   if (!session || role.error) {
@@ -69,14 +93,15 @@ function App() {
   }
 
   const parts: Record<Section, () => ReactNode> = {
-    formatter: () => <Formatter teacher={nameOf(session)} reviewer={reviewer} onSent={recount} />,
+    formatter: () => <Formatter teacher={nameOf(session)} reviewer={reviewer} onSent={recount} onSentBack={showSentBack} />,
     hod: () => <HodDesk onChange={recount} />,
     play: () => <Suspense fallback={<main className="page"><p className="empty">Loading the games…</p></main>}><Revise /></Suspense>,
-    profile: () => <ProfilePage name={nameOf(session)} email={session.user.email ?? ''} role={role.role ?? 'member'} profile={profile} onChange={setProfile} onSignOut={() => signOut()} />,
+    profile: () => <ProfilePage name={nameOf(session)} email={session.user.email ?? ''} role={role.role ?? 'member'} profile={profile} onChange={setProfile} onSignOut={() => signOut()}
+      alerts={alerts} fresh={fresh} focus={focus} active={here === 'profile'} />,
   };
   return (
     <>
-      <SectionHeader here={here} pages={pages} waiting={waiting} name={nameOf(session)} avatar={profile.avatar}
+      <SectionHeader here={here} pages={pages} waiting={waiting} alerts={alerts?.filter((a) => !a.seen).length ?? 0} name={nameOf(session)} avatar={profile.avatar}
         left={here === 'formatter' && <button type="button" className="top-link" onClick={toGuide}><span className="wide-only">How to write questions</span><span className="narrow-only">Guide</span></button>} />
       {[...pages, 'profile' as const].filter((p) => opened.has(p) || p === here).map((p) => (
         <div key={p} className="part" hidden={p !== here}>{parts[p]()}</div>
