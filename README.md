@@ -95,6 +95,21 @@ button: it points the chatbot at this page.
 `tests/instructions.test.ts` fails if the instructions and the code disagree (columns, IDs, boards, limits, difficulty words, labels on
 the page), if the template, the worked example or the guide's example would produce a single warning, or if the hiding setup changes.
 
+## Revision games (engine)
+
+`src/games/` makes matching, fill-in-the-blank, word search and crossword puzzles from bank questions, on the student's
+device, with no AI: the same questions and seed always give the same puzzle. Every game has a maker and a separate
+checker, and a puzzle is only returned after its checker passes it; otherwise it is made again with a new seed, then the
+next game is tried. The rules for each game, the guarantee and the stress results are in [docs/games.md](docs/games.md).
+
+```ts
+import { makePuzzle, seedOf, sameAnswer } from './src/games';
+const puzzle = makePuzzle(questions, seedOf(`${studentId}|${date}|${topicIds}`)); // crossword, else word search, matching, fill
+```
+
+`tests/games.test.ts` breaks puzzles on purpose and checks that every checker catches every kind of break;
+`tests/games-stress.test.ts` runs thousands of question sets through every game (`npm run stress` for 2,500 sets of each kind).
+
 ## Deploy to Vercel
 
 Import the repo in Vercel; the Vite preset is detected (build `npm run build`, output `dist`). No environment variables.
@@ -118,6 +133,8 @@ src/App.tsx                  the page
 src/components/              Editor (underlined Questions box), RowsTable (grouped preview), Guide (for people)
 src/instructions.html        instructions for chatbots (baked into index.html, hidden from people)
 src/example.ts               "Try an example"
+src/games/                   revision games: makers, checkers, makePuzzle (no website code)
+docs/games.md                the rules of each game and the proof
 ```
 
 The previous Game Maker (crossword, word search and other puzzle builders) is in the git history, up to commit `952a258`.
