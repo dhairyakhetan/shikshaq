@@ -137,10 +137,7 @@ export function Formatter({ teacher, onSent }: { teacher: string; onSent: () => 
 
   return (
     <>
-      <main className="page with-guide">
-        {/* the guide sits beside the formatter on wide screens, so it's there without scrolling */}
-        <aside className="guide-side"><Guide /></aside>
-        <div className="main-col">
+      <main className="page">
         <div className="intro enter">
           <h1>Question Formatter</h1>
           <p>Paste questions and answers in any format. They come out as clean rows for the question bank, each linked to its chapter by an ID.</p>
@@ -255,7 +252,7 @@ export function Formatter({ teacher, onSent }: { teacher: string; onSent: () => 
           </section>
         </div>
 
-        </div>
+        <Guide />
       </main>
 
       <div className="floating" aria-live="polite">

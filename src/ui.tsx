@@ -9,6 +9,7 @@ export const DownloadIcon = () => <svg {...base}><path d="M12 4v11M7 10l5 5 5-5M
 export const CopyIcon = () => <svg {...base}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></svg>;
 export const CheckIcon = () => <svg {...base} strokeWidth={2.8}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
 export const SendIcon = () => <svg {...base}><path d="M4 12h15M13 6l6 6-6 6" /></svg>;
+export const SignOutIcon = () => <svg {...base}><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" /></svg>;
 export const ArrowDownIcon = () => <svg {...base}><path d="M12 5v14M6 13l6 6 6-6" /></svg>;
 
 /** An icon that turns into a check mark for a moment after the action worked, without changing the button's size. */
@@ -141,19 +142,25 @@ export function Link({ href, className, children, ...rest }: { href: string; cla
   return <a href={href} className={className} onClick={click} {...rest}>{children}</a>;
 }
 
-/** The header: the parts this person may open, how many questions are waiting, and signing out. */
-export function SectionHeader({ here, pages, waiting = 0, name, onSignOut }: { here: Section; pages: Section[]; waiting?: number; name: string; onSignOut: () => void }) {
+/**
+ * The header: on the left the part's name and anything that belongs to that part only (`left`), so the links on the
+ * right never move when the part changes; on the right the parts this person may open, the number waiting, Sign out.
+ */
+export function SectionHeader({ here, pages, waiting = 0, name, onSignOut, left }: { here: Section; pages: Section[]; waiting?: number; name: string; onSignOut: () => void; left?: ReactNode }) {
   return (
     <header className="top">
       <div className="top-in">
-        <span className="brand"><Logo /><span className="brand-text">{SECTIONS.find((s) => s.key === here)!.name}</span></span>
+        <div className="top-left">
+          <span className="brand"><Logo /><span className="brand-text">{SECTIONS.find((s) => s.key === here)!.name}</span></span>
+          {left}
+        </div>
         <nav className="nav" aria-label="Parts of the site">
           {SECTIONS.filter((s) => pages.includes(s.key)).map((s) => (
             <Link key={s.key} href={s.href} className={`nav-link${s.key === here ? ' on' : ''}`} aria-current={s.key === here ? 'page' : undefined}>
               {s.link}{s.key === 'hod' && waiting > 0 && <span className="badge pop" key={waiting}>{waiting}</span>}
             </Link>
           ))}
-          <button type="button" className="top-link" title={`Signed in as ${name}`} onClick={onSignOut}>Sign out</button>
+          <button type="button" className="top-link" title={`Signed in as ${name}`} aria-label="Sign out" onClick={onSignOut}><SignOutIcon /><span className="wide-only">Sign out</span></button>
         </nav>
       </div>
     </header>

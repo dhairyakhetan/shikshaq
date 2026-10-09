@@ -39,12 +39,15 @@ code { font-family: var(--mono); background: var(--soft); padding: 1px 6px; bord
 /* the header: a solid pill floating at the top, as on Shikshaq */
 .top { position: sticky; top: 0; z-index: 20; padding: 12px 20px 0; pointer-events: none; }
 .top-in { pointer-events: auto; max-width: 1200px; margin: 0 auto; padding: 8px 8px 8px 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow-pill); }
+.narrow-only { display: none; }
+.top-left { display: flex; align-items: center; gap: 6px 14px; min-width: 0; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font: 800 19px/1 var(--display); letter-spacing: -.02em; }
 .nav { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .nav-link, .top-link { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: none; color: var(--prose); font-weight: 500; font-size: 14px; text-decoration: none; transition: background-color 200ms ease, color 200ms ease; }
 .nav-link.on { background: var(--ink); color: var(--bg); font-weight: 600; }
 .badge { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--brand); color: var(--ink); font-size: 12px; font-weight: 700; line-height: 1.5; text-align: center; }
-.nav .top-link { margin-left: 4px; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--line-strong); }
+.nav .top-link { margin-left: 4px; }
+.top-left .top-link { text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--line-strong); white-space: nowrap; }
 
 .page { max-width: 1200px; margin: 0 auto; padding: 32px 20px 72px; display: flex; flex-direction: column; gap: 24px; }
 .intro h1 { font-size: clamp(34px, 5vw, 56px); line-height: .98; letter-spacing: -.04em; }
@@ -263,21 +266,6 @@ a.linkish { color: var(--indigo-deep); }
 .signin-card p { margin: 0; color: var(--muted); font-weight: 400; }
 .signin-card .btn { width: 100%; margin-top: 6px; }
 
-/* the formatter with its guide: beside it on wide screens (and staying put while the formatter scrolls), below it on narrow ones */
-.page.with-guide { max-width: 1480px; display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
-.main-col { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
-.guide-side { order: 2; min-width: 0; }
-@media (min-width: 1100px) {
-  .page.with-guide { grid-template-columns: 340px minmax(0, 1fr); }
-  .guide-side { order: 0; position: sticky; top: 84px; max-height: calc(100vh - 100px); overflow-y: auto; overscroll-behavior: contain; padding: 2px 6px 24px 2px; scrollbar-width: thin; scrollbar-color: rgba(123, 115, 107, .35) transparent; }
-  .guide-side .guide { padding-top: 0; }
-  .guide-side .guide > h2 { font-size: 28px; }
-  .guide-side .guide-grid { grid-template-columns: minmax(0, 1fr); }
-}
-@media (min-width: 1100px) and (max-width: 1379px) {
-  .with-guide .layout { grid-template-columns: minmax(0, 1fr); }
-}
-
 /* guide for people */
 .guide { display: flex; flex-direction: column; gap: 16px; padding-top: 10px; }
 .guide > h2 { font: 800 clamp(28px, 4vw, 44px)/1 var(--display); letter-spacing: -.04em; }
@@ -333,6 +321,8 @@ a.linkish { color: var(--indigo-deep); }
   .nav { flex-wrap: nowrap; gap: 2px; }
   .nav-link, .top-link { padding: 0 11px; white-space: nowrap; font-size: 13px; }
   .wide-only { display: none; }
+  .narrow-only { display: inline; }
+  .top-left { gap: 6px; }
   .tabs { gap: 6px; }
   .tab { gap: 6px; padding: 0 13px; font-size: 14px; }
   .card { padding: 16px; border-radius: 18px; }
@@ -345,8 +335,8 @@ a.linkish { color: var(--indigo-deep); }
   .pick-row { align-items: flex-start; flex-direction: column; }
   .chapters { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 480px) {
-  .brand-text, .nav .top-link { display: none; }
+@media (max-width: 560px) {
+  .brand-text { display: none; }
 }
 
 /* ------------------------------------------------------------------ motion

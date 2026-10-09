@@ -13,6 +13,13 @@ import { HodDesk } from './hod';
 import { Revise } from './play';
 import { GoogleIcon, Logo, SectionHeader, useRoute, type Section } from './ui';
 
+/** Scrolls down to the guide at the bottom of the formatter, without adding "#..." to the address. */
+function toGuide() {
+  const el = document.getElementById('guide');
+  el?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  el?.focus({ preventScroll: true });
+}
+
 const partOf = (path: string): Section => (path.startsWith('/hod') ? 'hod' : path.startsWith('/play') ? 'play' : 'formatter');
 
 function App() {
@@ -61,7 +68,8 @@ function App() {
   };
   return (
     <>
-      <SectionHeader here={here} pages={pages} waiting={waiting.data ?? 0} name={nameOf(session)} onSignOut={() => signOut()} />
+      <SectionHeader here={here} pages={pages} waiting={waiting.data ?? 0} name={nameOf(session)} onSignOut={() => signOut()}
+        left={here === 'formatter' && <button type="button" className="top-link" onClick={toGuide}><span className="wide-only">How to write questions</span><span className="narrow-only">Guide</span></button>} />
       {pages.filter((p) => opened.has(p) || p === here).map((p) => (
         <div key={p} className="part" hidden={p !== here}>{parts[p]()}</div>
       ))}
