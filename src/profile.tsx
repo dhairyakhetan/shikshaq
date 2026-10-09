@@ -1,13 +1,13 @@
 /**
  * The profile page: the person's avatar (pick one), name, email and role, a bio, and signing out. The avatar and bio are
- * kept on this device only (localStorage). Then their notifications: every question of theirs the HoD sent back, with
- * the reason. For the admin, a list of people underneath: add someone by email with a role, change anyone's role, or
+ * kept on this device only (localStorage). The bell on the right of the card holds their notifications: every question
+ * of theirs the HoD sent back, with the reason. For the admin, a list of people underneath: add someone by email with a role, change anyone's role, or
  * take them off the list. Roles live in the database, and each person's device asks for theirs every time the site
  * opens, so a change shows on their next refresh.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadPeople, removePerson, ROLE_NAMES, setPersonRole, type Person, type Role, type SentBack } from './db';
-import { Avatar, AVATAR_COUNT, avatarFor, BellIcon, RowsTable, SignOutIcon, useUndo } from './ui';
+import { Avatar, AVATAR_COUNT, avatarFor, BellIcon, SignOutIcon, useUndo } from './ui';
 
 // ---------------------------------------------------------------- avatar and bio, on this device
 
@@ -38,14 +38,21 @@ export function useProfile(email: string) {
 
 const when = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
-/** `alerts`: the notifications (null while loading); `fresh`: the ones that were new; `focus`: where to scroll. */
-export function ProfilePage({ name, email, role, profile, onChange, onSignOut, alerts, fresh, focus, active }: {
+type Alerts = { list?: SentBack[]; error?: string };
+type Focus = { ids: string[]; n: number } | null;
+
+/**
+ * `alerts`: the notifications (no list while loading); `fresh`: the ones that were new; `focus`: opens the bell at these
+ * questions; `active`: the profile is on screen; `onSeen`: the bell was opened; `onRetry`: load them again.
+ */
+export function ProfilePage({ name, email, role, profile, onChange, onSignOut, alerts, fresh, focus, active, onSeen, onRetry }: {
   name: string; email: string; role: Role; profile: Profile; onChange: (p: Partial<Profile>) => void; onSignOut: () => void;
-  alerts: SentBack[] | null; fresh: Set<string>; focus: { ids: string[]; n: number } | null; active: boolean;
+  alerts: Alerts; fresh: Set<string>; focus: Focus; active: boolean; onSeen: () => void; onRetry: () => void;
 }) {
   return (
     <main className="page profile">
-      <section className="card stack enter" aria-labelledby="me-h">
+      <section className="card stack enter me-card" aria-labelledby="me-h">
+        <Bell alerts={alerts} fresh={fresh} focus={focus} active={active} onSeen={onSeen} onRetry={onRetry} />
         <div className="profile-head">
           <Avatar n={profile.avatar} size={88} />
           <div>
@@ -78,7 +85,6 @@ export function ProfilePage({ name, email, role, profile, onChange, onSignOut, a
         </div>
       </section>
 
-      <Notifications alerts={alerts} fresh={fresh} focus={focus} active={active} />
       {role === 'admin' && <People me={email} />}
     </main>
   );
@@ -86,41 +92,85 @@ export function ProfilePage({ name, email, role, profile, onChange, onSignOut, a
 
 // ---------------------------------------------------------------- notifications
 
-/** The person's questions that were sent back, grouped by chapter and topic, each with the reason. */
-function Notifications({ alerts, fresh, focus, active }: { alerts: SentBack[] | null; fresh: Set<string>; focus: { ids: string[]; n: number } | null; active: boolean }) {
-  // scroll to the notifications (or to the questions asked for) once per request, when the page and list are there
-  const scrolled = useRef(0);
+/** The bell on the profile card: the number of new notifications, and the list when it's open. */
+function Bell({ alerts, fresh, focus, active, onSeen, onRetry }: {
+  alerts: Alerts; fresh: Set<string>; focus: Focus; active: boolean; onSeen: () => void; onRetry: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const unseen = alerts.list?.filter((a) => !a.seen).length ?? 0;
+  // "See why" in the formatter, or arriving with new ones, opens it (once per request)
+  const handled = useRef(0);
   useEffect(() => {
-    if (!active || !focus || !alerts || scrolled.current === focus.n) return;
-    scrolled.current = focus.n;
-    const el = (focus.ids.length && document.querySelector('#alerts .qrow.flash')) || document.getElementById('alerts');
-    requestAnimationFrame(() => el?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: focus.ids.length ? 'center' : 'start' }));
-  }, [active, focus, alerts]);
+    if (!active || !focus || handled.current === focus.n) return;
+    handled.current = focus.n;
+    setOpen(true);
+  }, [active, focus]);
+  useEffect(() => { if (!active) setOpen(false); }, [active]);
+  // opening it marks what was new as seen
+  useEffect(() => { if (open && unseen) onSeen(); }, [open, unseen, onSeen]);
+  // the questions asked for come into view inside the list
+  useEffect(() => {
+    if (!open || !focus?.ids.length) return;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(() => box.current?.querySelector('.sb-item.flash')?.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' }));
+  }, [open, focus, alerts.list]);
+  // a click outside or Escape closes it
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
   const flash = new Set(focus?.ids);
-  const rows = [...(alerts ?? [])].sort((x, y) => (x.chapter_id ?? '').localeCompare(y.chapter_id ?? '') || (x.topic_no ?? 0) - (y.topic_no ?? 0) || x.question_no - y.question_no);
 
   return (
-    <section id="alerts" className="card stack alerts enter" tabIndex={-1} aria-labelledby="alerts-h" style={{ animationDelay: '40ms' }}>
-      <div className="alerts-head">
-        <span className="bell"><BellIcon /></span>
-        <div>
-          <h2 id="alerts-h">Notifications {fresh.size > 0 && <span className="badge alert pop">{fresh.size} new</span>}</h2>
-          <p className="small muted">Questions your HoD sent back, and why. Fix them in the formatter and send them again.</p>
-        </div>
-      </div>
-      {!alerts ? <p className="small muted">Loading…</p> : !rows.length ? <p className="empty">Nothing has been sent back to you.</p> : (
-        <RowsTable rows={rows} keyOf={(a) => a.id} rowClass={(a) => (flash.has(a.id) ? 'flash' : '')} extra={(a) => (
-          <div className="acts">
-            <p className="reason"><b>Why:</b> {a.note}</p>
-            <p className="small muted">
-              {fresh.has(a.id) && <span className="tag">New</span>}
-              Sent back by {a.reviewer}{a.reviewedAt && `, ${when(a.reviewedAt)}`}.
-              {a.now && (a.now === 'approved' ? ' Since sent again, and approved.' : ' Since sent again, and waiting for the HoD.')}
-            </p>
+    <div className="bell-box" ref={box}>
+      <button type="button" className={`bell-btn${open ? ' on' : ''}`} aria-expanded={open} aria-controls="alerts"
+        aria-label={`Notifications${unseen ? `, ${unseen} new` : ''}`} onClick={() => setOpen((o) => !o)}>
+        <BellIcon />
+        {unseen > 0 && <span className="badge alert pop" key={unseen} aria-hidden="true">{unseen}</span>}
+      </button>
+      {open && (
+        <div id="alerts" className="alerts-pop" role="region" aria-labelledby="alerts-h">
+          <div>
+            <h2 id="alerts-h">Notifications</h2>
+            <p className="small muted">Questions your HoD sent back, and why. Fix them in the formatter and send them again.</p>
           </div>
-        )} />
+          {alerts.list ? (alerts.list.length ? (
+            <ul className="sb-list">
+              {alerts.list.map((a) => (
+                <li key={a.id} className={`sb-item${flash.has(a.id) ? ' flash' : ''}`}>
+                  <p className="small muted">{[a.chapter_no !== null && `Chapter ${a.chapter_no}`, a.chapter].filter(Boolean).join(': ')}{a.topic && ` · ${a.topic}`}</p>
+                  <p className="sb-q">{a.question}</p>
+                  <p className="sb-a">{a.answer}</p>
+                  <p className="reason"><b>Why:</b> {a.note}</p>
+                  <p className="small muted">
+                    {fresh.has(a.id) && <span className="tag">New</span>}
+                    Sent back by {a.reviewer}{a.reviewedAt && `, ${when(a.reviewedAt)}`}.
+                    {a.now && (a.now === 'approved' ? ' Since sent again, and approved.' : ' Since sent again, and waiting for the HoD.')}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="empty-state sb-empty">
+              <span className="bell"><BellIcon /></span>
+              <p><b>No notifications</b></p>
+              <p className="small muted">When your HoD sends a question back, it shows up here with the reason.</p>
+            </div>
+          )) : alerts.error ? (
+            <div className="empty-state sb-empty" role="alert">
+              <p><b>Couldn't load your notifications.</b></p>
+              <p className="small muted">{alerts.error}</p>
+              <button type="button" className="btn small primary" onClick={onRetry}>Try again</button>
+            </div>
+          ) : <p className="small muted">Loading your notifications…</p>}
+        </div>
       )}
-    </section>
+    </div>
   );
 }
 

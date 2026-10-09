@@ -4,7 +4,8 @@
  * the HoD desk; only admins get Revise, whose games are downloaded only when it is opened.
  * Moving between the parts doesn't reload the page: the header stays and the parts crossfade. A part stays open once
  * visited, so its text, puzzle or list is still there on the way back. The person's notifications (their questions
- * that were sent back) are loaded here too: the number of new ones shows on their avatar, and the list on their profile.
+ * that were sent back) are loaded here too: the number of new ones shows on their avatar and on the bell on their
+ * profile, which lists them; opening it marks them seen.
  */
 import { lazy, StrictMode, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -42,10 +43,11 @@ function App() {
   const path = useRoute();
   const [profile, setProfile] = useProfile(session?.user.email ?? '');
   const [opened, setOpened] = useState<Set<Section>>(new Set());
-  // notifications: loaded once signed in, again whenever the profile opens (which marks them seen)
-  const [alerts, setAlerts] = useState<SentBack[] | null>(null);
-  const [fresh, setFresh] = useState<Set<string>>(new Set()); // the ones that were new when the profile opened
-  const [focus, setFocus] = useState<{ ids: string[]; n: number } | null>(null); // what the profile scrolls to
+  // notifications: loaded once signed in, and again whenever the profile opens
+  const [alerts, setAlerts] = useState<{ list?: SentBack[]; error?: string }>({});
+  const [alertsTry, setAlertsTry] = useState(0); // "Try again"
+  const [fresh, setFresh] = useState<Set<string>>(new Set()); // the ones that were new when the bell was opened
+  const [focus, setFocus] = useState<{ ids: string[]; n: number } | null>(null); // opens the bell, at these questions
   /** Opens the notifications, at these questions (the formatter's "See why"). */
   const showSentBack = useCallback((ids: string[]) => { setFocus({ ids, n: Date.now() }); go('/profile/'); }, []);
 
@@ -60,20 +62,25 @@ function App() {
   const onProfile = here === 'profile';
   useEffect(() => {
     if (!onProfile) { setFresh((f) => (f.size ? new Set() : f)); setFocus(null); }
-    if (!role.role) { setAlerts(null); return; }
+    if (!role.role) { setAlerts({}); return; }
     let current = true; // a later load wins
+    setAlerts((a) => ({ list: a.list }));
     mySentBack().then((list) => {
       if (!current) return;
-      if (!onProfile) { setAlerts(list); return; }
-      const unseen = list.filter((a) => !a.seen).map((a) => a.id);
-      setAlerts(list.map((a) => ({ ...a, seen: true })));
-      if (!unseen.length) return;
-      setFresh(new Set(unseen));
-      setFocus((f) => f ?? { ids: [], n: Date.now() });
-      markSentBackSeen().catch(() => {});
-    }, () => {});
+      setAlerts({ list });
+      // arriving at the profile with new ones opens the bell
+      if (onProfile && list.some((a) => !a.seen)) setFocus((f) => f ?? { ids: [], n: Date.now() });
+    }, (e: Error) => { if (current) setAlerts((a) => ({ list: a.list, error: e.message })); });
     return () => { current = false; };
-  }, [role.role, onProfile]);
+  }, [role.role, onProfile, alertsTry]);
+  /** The bell was opened: what was new is now seen (and keeps its "New" label while the profile is open). */
+  const seeAlerts = () => {
+    const unseen = alerts.list?.filter((a) => !a.seen).map((a) => a.id) ?? [];
+    if (!unseen.length) return;
+    setFresh((f) => new Set([...f, ...unseen]));
+    setAlerts((a) => ({ ...a, list: a.list?.map((x) => ({ ...x, seen: true })) }));
+    markSentBackSeen().catch(() => {});
+  };
 
   if (session === undefined || (session && !role.role && !role.error)) return <div className="splash" aria-busy="true"><Logo /></div>;
   if (!session || role.error) {
@@ -97,11 +104,11 @@ function App() {
     hod: () => <HodDesk onChange={recount} />,
     play: () => <Suspense fallback={<main className="page"><p className="empty">Loading the games…</p></main>}><Revise /></Suspense>,
     profile: () => <ProfilePage name={nameOf(session)} email={session.user.email ?? ''} role={role.role ?? 'member'} profile={profile} onChange={setProfile} onSignOut={() => signOut()}
-      alerts={alerts} fresh={fresh} focus={focus} active={here === 'profile'} />,
+      alerts={alerts} fresh={fresh} focus={focus} active={onProfile} onSeen={seeAlerts} onRetry={() => setAlertsTry((n) => n + 1)} />,
   };
   return (
     <>
-      <SectionHeader here={here} pages={pages} waiting={waiting} alerts={alerts?.filter((a) => !a.seen).length ?? 0} name={nameOf(session)} avatar={profile.avatar}
+      <SectionHeader here={here} pages={pages} waiting={waiting} alerts={alerts.list?.filter((a) => !a.seen).length ?? 0} name={nameOf(session)} avatar={profile.avatar}
         left={here === 'formatter' && <button type="button" className="top-link" onClick={toGuide}><span className="wide-only">How to write questions</span><span className="narrow-only">Guide</span></button>} />
       {[...pages, 'profile' as const].filter((p) => opened.has(p) || p === here).map((p) => (
         <div key={p} className="part" hidden={p !== here}>{parts[p]()}</div>

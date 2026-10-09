@@ -300,17 +300,32 @@ select { height: 46px; padding: 0 12px; font-size: 16px; font-weight: 500; }
 .person .who b { overflow-wrap: anywhere; }
 .person select { width: auto; height: 40px; }
 
-/* notifications: questions that were sent back */
-.alerts-head { display: flex; align-items: flex-start; gap: 14px; }
-.alerts-head h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 22px; }
-.alerts-head .small { margin-top: 6px; }
-.bell { display: grid; flex: none; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: var(--brand-tint); color: var(--brand-deep); }
-.bell svg { width: 22px; height: 22px; }
-.alerts .qrow.flash { background: var(--brand-tint); }
-.alerts .acts .small { margin: 0; }
+/* notifications: the bell on the profile card, and its list */
+.me-card { position: relative; z-index: 2; }
+.me-card .profile-head { padding-right: 60px; }
+.bell-box { position: absolute; top: 20px; right: 20px; }
+.bell-btn { position: relative; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 16px; background: var(--card); box-shadow: var(--shadow-border); color: var(--ink); transition: background-color 150ms ease, color 150ms ease, box-shadow 200ms ease, transform 150ms ease; }
+.bell-btn svg { width: 22px; height: 22px; }
+.bell-btn.on { background: var(--ink); color: var(--bg); box-shadow: none; }
+.bell-btn:active { transform: scale(var(--press)); }
+.bell-btn .badge.alert { position: absolute; top: -6px; right: -6px; min-width: 20px; padding: 0 5px; font-size: 11px; box-shadow: 0 0 0 2px var(--card); }
+.alerts-pop { position: absolute; top: calc(100% + 10px); right: 0; display: flex; flex-direction: column; gap: 12px; width: min(420px, calc(100vw - 64px)); max-height: min(70vh, 540px); overflow-y: auto; overscroll-behavior: contain; padding: 18px; border-radius: 20px; background: var(--card); box-shadow: var(--shadow-bone); transform-origin: top right; animation: drop 220ms var(--ease) both; }
+@keyframes drop { from { opacity: 0; transform: translateY(calc(var(--rise) * -.3)) scale(var(--reveal)); } }
+.alerts-pop h2 { font-size: 20px; }
+.alerts-pop h2 + .small { margin: 4px 0 0; }
+.sb-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.sb-item { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); transition: background-color 300ms ease, box-shadow 300ms ease; }
+.sb-item.flash { background: var(--brand-tint); box-shadow: inset 0 0 0 1px var(--brand); }
+.sb-item p { margin: 0; }
+.sb-q, .sb-a { overflow-wrap: anywhere; }
+.sb-a { font-weight: 700; }
+.sb-empty { gap: 8px; padding: 26px 16px; border-radius: 16px; }
+.bell { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 16px; background: var(--brand-tint); color: var(--brand-deep); }
+.bell svg { width: 24px; height: 24px; }
 .tag { display: inline-block; margin-right: 8px; padding: 0 8px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; }
 @media (hover: hover) {
   .me:hover, .avatar-btn:not(.on):hover { transform: translateY(-2px); }
+  .bell-btn:not(.on):hover { background: var(--soft); box-shadow: var(--shadow-border-hover); }
 }
 
 /* guide for people */
@@ -359,6 +374,8 @@ select { height: 46px; padding: 0 12px; font-size: 16px; font-weight: 500; }
   .details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
+  .bell-box { top: 14px; right: 14px; }
+  .me-card .profile-head { padding-right: 54px; }
   .top { padding: 8px 12px 0; }
   .top-in { padding: 6px 6px 6px 14px; flex-wrap: nowrap; }
   .cw-clue { top: 72px; }

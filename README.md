@@ -14,8 +14,8 @@ in the browser, and there is no sample data: when the bank is empty, the pages s
 
 The pages use Shikshaq's look (its colours, fonts, pill buttons, shadows and motion timings). This is a standalone site.
 
-Each person's profile has **notifications**: every question of theirs the HoD sent back, with the reason. The number of
-new ones shows on their avatar at the top of every page.
+Each person's profile card has a **bell** with their notifications: every question of theirs the HoD sent back, with the
+reason. The number of new ones shows on their avatar at the top of every page.
 
 ## Question formatter (`/`)
 
