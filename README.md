@@ -10,7 +10,7 @@ Three separate parts, each its own page. They work without each other and share 
 
 The questions will come from Shikshaq's database. For now there is no database and nothing is saved, not even in the
 browser: each page starts from a sample question bank in `src/db.ts` (CBSE Classes 9, 10 and 11; Science, Biology and
-Geography; 8 chapters, 113 questions, some approved, some waiting, two sent back), and a reload starts again.
+Geography; 12 chapters, 166 questions, some approved, some waiting, two sent back), and a reload starts again.
 [CLAUDE.md](CLAUDE.md) says how the database will plug in.
 
 The pages use Shikshaq's look (its colours, fonts, pill buttons, shadows and motion timings), so they can move into the
@@ -79,7 +79,7 @@ be saved in the database.
 
 ## Revise (`/play/`)
 
-Students pick their class, subject and chapter, and tick the topics they studied. Every game those questions can make is offered (a game that
+Students tap their class and subject, pick a chapter card, and tick the topics they studied. Every game those questions can make is offered (a game that
 can't be made, say because the answers are too long for a grid, is greyed out); **New puzzle** makes another.
 
 - **Crossword**: tap a square and type; tap it again to switch between across and down. Check marks wrong letters;

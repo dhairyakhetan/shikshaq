@@ -131,7 +131,7 @@ describe('the demo question bank (what the Revise page shows)', () => {
   const chapters = [...new Set(approved.map((q) => q.chapter_id))];
 
   it('makes every game for every whole chapter, and a puzzle for every single topic', () => {
-    expect(chapters.length).toBe(5);
+    expect(chapters.length).toBe(9);
     for (const ch of chapters) {
       const qs = approved.filter((q) => q.chapter_id === ch);
       const all = qs.map((q) => ({ id: q.id, question: q.question, answer: q.answer }));

@@ -431,7 +431,7 @@ describe('approval (the question bank behind the Approve page)', () => {
 
   it('has a demo bank that is exactly what the formatter would make from the same questions', () => {
     const { batches, questions } = SAMPLE_BANK;
-    expect(counts(SAMPLE_BANK)).toEqual({ pending: 33, approved: 78, rejected: 2 });
+    expect(counts(SAMPLE_BANK)).toEqual({ pending: 33, approved: 131, rejected: 2 });
     expect(new Set(questions.map((q) => q.chapter_id)).size).toBe(batches.length);
     expect(new Set(questions.map((q) => q.class))).toEqual(new Set([9, 10, 11]));
     expect(new Set(questions.map((q) => q.id)).size).toBe(questions.length);

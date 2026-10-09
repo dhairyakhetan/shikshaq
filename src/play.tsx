@@ -14,7 +14,7 @@ import { SectionHeader } from './ui';
 const NAMES: Record<GameType, string> = { crossword: 'Crossword', wordsearch: 'Word search', matching: 'Matching', fill: 'Fill in the blank' };
 
 interface Topic { key: string; no: number | null; name: string; count: number }
-interface Chapter { id: string; cls: number | null; subject: string; no: number | null; title: string; meta: string; topics: Topic[]; questions: BankQuestion[] }
+interface Chapter { id: string; cls: number | null; subject: string; no: number | null; name: string; title: string; meta: string; topics: Topic[]; questions: BankQuestion[] }
 
 const topicKey = (q: BankQuestion) => q.topic_id ?? `${q.chapter_id}|${q.topic}`;
 
@@ -32,7 +32,7 @@ function chaptersOf(questions: BankQuestion[]): Chapter[] {
     }
     const q0 = qs[0];
     return {
-      id, questions: qs, cls: q0.class, subject: q0.subject, no: q0.chapter_no,
+      id, questions: qs, cls: q0.class, subject: q0.subject, no: q0.chapter_no, name: q0.chapter,
       title: `Chapter ${q0.chapter_no}: ${q0.chapter}`,
       meta: [q0.board, q0.class && `Class ${q0.class}`, q0.subject].filter(Boolean).join(' · '),
       topics: [...topics.values()].sort((a, b) => (a.no ?? 99) - (b.no ?? 99)),
@@ -93,29 +93,43 @@ function Revise() {
         ) : (
           <>
             <section className="card stack picker enter" aria-labelledby="pick-h">
-              <div className="pickers">
-                <label className="field">Class
-                  <select value={chapter.cls ?? ''} onChange={(e) => open(chapters.find((c) => String(c.cls) === e.target.value))}>
-                    {classes.map((n) => <option key={n} value={n ?? ''}>Class {n}</option>)}
-                  </select>
-                </label>
-                <label className="field">Subject
-                  <select value={chapter.subject} onChange={(e) => open(chapters.find((c) => c.cls === chapter.cls && c.subject === e.target.value))}>
-                    {subjects.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </label>
-                <label className="field">Chapter
-                  <select value={chapter.id} onChange={(e) => open(chapters.find((c) => c.id === e.target.value))}>
-                    {inSubject.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-                  </select>
-                </label>
+              <h2 id="pick-h">What are you revising?</h2>
+              <div className="pick-top">
+                <div className="pick-row">
+                  <span className="pick-label" id="class-l">Class</span>
+                  <div className="tabs" role="radiogroup" aria-labelledby="class-l">
+                    {classes.map((n) => (
+                      <button key={n} type="button" role="radio" aria-checked={n === chapter.cls} className={`tab${n === chapter.cls ? ' on' : ''}`}
+                        onClick={() => open(chapters.find((c) => c.cls === n))}>Class {n}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="pick-row">
+                  <span className="pick-label" id="subject-l">Subject</span>
+                  <div className="tabs" role="radiogroup" aria-labelledby="subject-l">
+                    {subjects.map((s) => (
+                      <button key={s} type="button" role="radio" aria-checked={s === chapter.subject} className={`tab${s === chapter.subject ? ' on' : ''}`}
+                        onClick={() => open(chapters.find((c) => c.cls === chapter.cls && c.subject === s))}>{s}</button>
+                    ))}
+                  </div>
+                </div>
               </div>
               <div>
-                <h2 id="pick-h">{chapter.title}</h2>
-                <p className="small muted">{chapter.meta} · {chapter.questions.length} approved questions</p>
+                <span className="pick-label" id="chapter-l">Chapter</span>
+                <ul className="chapters" aria-labelledby="chapter-l">
+                  {inSubject.map((c) => (
+                    <li key={c.id}>
+                      <button type="button" className={`chapter${c.id === chapter.id ? ' on' : ''}`} aria-pressed={c.id === chapter.id} onClick={() => open(c)}>
+                        <span className="ch-no">Chapter {c.no}</span>
+                        <b>{c.name}</b>
+                        <span className="small muted">{c.topics.length} topics · {c.questions.length} questions</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
               <fieldset className="topics">
-                <legend>Which topics did you study?</legend>
+                <legend>Which topics of Chapter {chapter.no} did you study?</legend>
                 {chapter.topics.map((t) => (
                   <label key={t.key} className={`topic${chosen.includes(t.key) ? ' on' : ''}`}>
                     <input type="checkbox" checked={chosen.includes(t.key)} onChange={() => toggle(t.key)} />

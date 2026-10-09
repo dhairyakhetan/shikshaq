@@ -161,8 +161,18 @@ a.linkish { color: var(--indigo-deep); }
 .review .rows { max-height: none; }
 
 /* Revise: picking topics */
-select { height: 46px; max-width: 100%; padding: 0 12px; font-size: 16px; font-weight: 500; }
-.pickers { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 3fr); gap: 10px; }
+.picker h2 { font-size: 21px; line-height: 1.2; }
+.pick-top { display: flex; flex-wrap: wrap; gap: 12px 32px; }
+.pick-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.pick-label { display: block; font-weight: 600; font-size: 14px; }
+.pick-row .pick-label { min-width: 52px; }
+.chapters { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 8px 0 0; padding: 0; list-style: none; }
+.chapter { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; height: 100%; padding: 14px 16px; border: 0; border-radius: 16px; background: var(--card); box-shadow: var(--shadow-border); color: var(--ink); text-align: left; transition: background-color 200ms ease, color 200ms ease, box-shadow 200ms ease, transform 200ms var(--ease); }
+.chapter b { font-size: 16px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; }
+.ch-no { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.chapter.on { background: var(--ink); color: var(--bg); box-shadow: none; }
+.chapter.on .ch-no, .chapter.on .muted { color: rgba(249, 245, 241, .65); }
+.chapter:active { transform: scale(var(--press)); transition-duration: 150ms; }
 .topics { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
 .topics legend { margin-bottom: 10px; font-weight: 600; font-size: 14px; }
 .topic { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 12px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow-border); font-weight: 500; font-size: 14px; cursor: pointer; transition: background-color 200ms ease, color 200ms ease, box-shadow 200ms ease; }
@@ -269,7 +279,7 @@ select { height: 46px; max-width: 100%; padding: 0 12px; font-size: 16px; font-w
 /* hover only where there is a mouse: on a phone a tap would leave it stuck on */
 @media (hover: hover) {
   .nav-link:not(.on):hover, .top-link:hover { background: var(--soft); color: var(--ink); }
-  .btn:hover:not(:disabled), .chip:hover, .tab:not(.on):hover:not(:disabled), .topic:not(.on):hover, .tile:hover:not(:disabled) { box-shadow: var(--shadow-border-hover); }
+  .btn:hover:not(:disabled), .chip:hover, .tab:not(.on):hover:not(:disabled), .topic:not(.on):hover, .tile:hover:not(:disabled), .chapter:not(.on):hover { box-shadow: var(--shadow-border-hover); }
   .btn:hover:not(:disabled):not(.primary):not(.dark):not(.ok):not(.danger):not(.is-done), .chip:not(.ok):hover { background: var(--soft); }
   .btn.quiet:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--ink); color: var(--ink); background: transparent; }
   .btn.primary:hover:not(:disabled), .btn.dark:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 24px -8px rgba(31, 31, 31, .5); }
@@ -305,8 +315,8 @@ select { height: 46px; max-width: 100%; padding: 0 12px; font-size: 16px; font-w
   .editor textarea, .backdrop-in { font-size: 14px; }
   .guide-grid { grid-template-columns: minmax(0, 1fr); }
   .row .btn { flex: 1 1 auto; }
-  .pickers { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .pickers .field:last-child { grid-column: 1 / -1; }
+  .pick-row { align-items: flex-start; flex-direction: column; }
+  .chapters { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 480px) {
   .brand-text, .nav .top-link { display: none; }

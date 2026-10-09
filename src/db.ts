@@ -119,7 +119,7 @@ export const newId = () => (typeof crypto?.randomUUID === 'function' ? crypto.ra
 // ---------------------------------------------------------------- demo data
 
 /**
- * What the database might hold, so each page can be tried on its own: CBSE chapters from Classes 9, 10 and 11, each one
+ * What the database might hold, so each page can be tried on its own: 12 CBSE chapters from Classes 9, 10 and 11, each one
  * teacher's batch. Approved batches are the question bank the games use; waiting ones are on the HoD desk. A 4th item on
  * a question means the HoD sent it back, with that reason. Delete all of this when the real database is connected.
  */
@@ -245,6 +245,91 @@ const DEMO: DemoChapter[] = [
       ['Wearing away of the topsoil by wind and water', 'Soil erosion', 'easy'],
       ['Ploughing along the contour lines to slow water running down a slope', 'Contour ploughing', 'medium'],
       ['Rows of trees planted to break the force of the wind', 'Shelter belts', 'medium'],
+    ]],
+  ] },
+  { cls: 9, subject: 'Science', code: 'SCI', no: 1, name: 'Matter in Our Surroundings', by: 'Mr Iyer', hoursAgo: 170, status: 'approved', topics: [
+    ['Particles of Matter', [
+      ['Mixing of particles of two different types of matter on their own', 'Diffusion', 'easy'],
+      ['Diffusion becomes faster when this is increased', 'Temperature', 'easy'],
+      ['What holds the particles of matter together', 'Force of attraction', 'medium'],
+    ]],
+    ['Change of State', [
+      ['Temperature at which a solid melts to become a liquid at atmospheric pressure', 'Melting point', 'easy'],
+      ['Heat energy needed to change 1 kg of a solid into a liquid at its melting point', 'Latent heat of fusion', 'hard'],
+      ['Change of a solid directly into a gas without becoming a liquid', 'Sublimation', 'easy'],
+      ['Change of a gas directly into a solid without becoming a liquid', 'Deposition', 'medium'],
+      ['SI unit of temperature', 'Kelvin', 'easy'],
+    ]],
+    ['Evaporation', [
+      ['Change of a liquid into vapour at any temperature below its boiling point', 'Evaporation', 'easy'],
+      ['Evaporation causes this, which is why sweating keeps us cool', 'Cooling', 'easy'],
+      ['Amount of water vapour present in the air', 'Humidity', 'easy'],
+      ['Fabric best worn in summer because it soaks up sweat', 'Cotton', 'easy'],
+    ]],
+  ] },
+  { cls: 10, subject: 'Science', code: 'SCI', no: 6, name: 'Control and Coordination', by: 'Ms Sharma', hoursAgo: 40, status: 'approved', topics: [
+    ['Nervous System', [
+      ['Basic unit of the nervous system', 'Neuron', 'easy'],
+      ['Gap between two neurons that a nerve impulse crosses', 'Synapse', 'medium'],
+      ['Quick, automatic response, such as pulling a hand away from a flame', 'Reflex action', 'easy'],
+      ['Path that a nerve impulse takes in a reflex action', 'Reflex arc', 'medium'],
+      ['Part of the brain that keeps the body balanced and its posture steady', 'Cerebellum', 'medium'],
+      ['Part of the hindbrain that controls blood pressure, salivation and vomiting', 'Medulla', 'hard'],
+    ]],
+    ['Coordination in Plants', [
+      ['Plant hormone, made at the shoot tip, that helps cells grow longer', 'Auxin', 'medium'],
+      ['Plant hormones that help the stem grow', 'Gibberellins', 'medium'],
+      ['Plant hormones that help cells divide', 'Cytokinins', 'medium'],
+      ['Plant hormone that slows growth and makes leaves wilt', 'Abscisic acid', 'hard'],
+      ['Growth of a plant part towards or away from light', 'Phototropism', 'easy'],
+    ]],
+    ['Hormones in Animals', [
+      ['Hormone made by the pancreas that controls blood sugar', 'Insulin', 'easy'],
+      ['Hormone from the adrenal glands that gets the body ready for an emergency', 'Adrenaline', 'easy'],
+      ['Element the thyroid gland needs to make thyroxin', 'Iodine', 'easy'],
+      ['Swollen neck caused by too little iodine in the diet', 'Goitre', 'medium'],
+      ['Gland that makes growth hormone', 'Pituitary', 'medium'],
+    ]],
+  ] },
+  { cls: 10, subject: 'Geography', code: 'GEO', no: 2, name: 'Forest and Wildlife Resources', by: 'Mr Iyer', hoursAgo: 50, status: 'approved', topics: [
+    ['Conserving Forests and Wildlife', [
+      ['Project launched in 1973 to save tigers', 'Project Tiger', 'easy'],
+      ['Law passed in 1972 to protect wildlife in India', 'Indian Wildlife (Protection) Act', 'medium'],
+      ['Movement in the Himalayas in which people hugged trees to stop them being cut', 'Chipko movement', 'easy'],
+      ['Community in Rajasthan known for protecting blackbuck and chinkara', 'Bishnois', 'medium'],
+    ]],
+    ['Types of Forests', [
+      ['Forests thought most valuable for conservation, more than half of all forest land', 'Reserved forests', 'medium'],
+      ['Forests guarded from any further damage, about a third of all forest land', 'Protected forests', 'medium'],
+      ['Forests and wastelands that belong to the government, private people and communities', 'Unclassed forests', 'hard'],
+    ]],
+    ['Communities and Conservation', [
+      ['Programme, started in Odisha in 1988, in which villages help look after damaged forests', 'Joint forest management', 'medium'],
+      ['Patches of forest left untouched because people believe gods live there', 'Sacred groves', 'easy'],
+      ['Tiger reserve in Rajasthan where villagers fought against mining', 'Sariska', 'medium'],
+      ['Movement in Tehri that showed crops can be grown well without chemicals', 'Beej Bachao Andolan', 'hard'],
+    ]],
+  ] },
+  { cls: 11, subject: 'Biology', code: 'BIO', no: 2, name: 'Biological Classification', by: 'Ms Fernandes', hoursAgo: 90, status: 'approved', topics: [
+    ['Five Kingdom Classification', [
+      ['Scientist who proposed the five kingdom classification', 'Whittaker', 'easy'],
+      ['Kingdom that all bacteria belong to', 'Monera', 'easy'],
+      ['Kingdom of single-celled eukaryotes, such as Amoeba and Euglena', 'Protista', 'easy'],
+      ['Kingdom of heterotrophs whose cell walls are made of chitin', 'Fungi', 'medium'],
+    ]],
+    ['Bacteria and Fungi', [
+      ['Bacteria that live in harsh places such as hot springs and salty areas', 'Archaebacteria', 'medium'],
+      ['Special cells of some cyanobacteria that fix nitrogen', 'Heterocysts', 'hard'],
+      ['Long, thread-like structures that make up the body of most fungi', 'Hyphae', 'easy'],
+      ['Network of hyphae', 'Mycelium', 'easy'],
+      ['Fungus used to make bread and beer', 'Yeast', 'easy'],
+    ]],
+    ['Viruses, Viroids and Lichens', [
+      ['Partnership between algae and fungi', 'Lichens', 'easy'],
+      ['Partnership between fungi and the roots of higher plants', 'Mycorrhiza', 'medium'],
+      ['Infectious agents made of free RNA with no protein coat', 'Viroids', 'medium'],
+      ['Protein coat of a virus', 'Capsid', 'easy'],
+      ['Infectious agents made of abnormally folded protein', 'Prions', 'hard'],
     ]],
   ] },
   { cls: 10, subject: 'Science', code: 'SCI', no: 3, name: 'Metals and Non-Metals', by: 'Mr Iyer', hoursAgo: 3, status: 'pending', topics: [
