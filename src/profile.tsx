@@ -68,7 +68,6 @@ export function ProfilePage({ name, email, role, profile, onChange, onSignOut }:
           <label htmlFor="bio">Bio</label>
           <textarea id="bio" rows={3} maxLength={300} value={profile.bio} placeholder="A line about you: what you teach, where."
             onChange={(e) => onChange({ bio: e.target.value })} />
-          <span className="small muted">Your avatar and bio are kept on this device only.</span>
         </div>
 
         <div className="row">
