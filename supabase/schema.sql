@@ -9,15 +9,13 @@
 --                (T00 when the question has no topic). Numbers are given in order and never reused.
 --   batch_id     B20261009-03 = the 3rd batch sent on 9 October 2026 (India time)
 --
--- The website never reads or writes `batches` or `questions` itself. It calls the functions at the end (the two that
--- write, submit_batch and hod_set_status, only from the site's server with the secret key):
---   submit_batch     the formatter sends a teacher's questions (they wait for the HoD)
---   waiting_count    how many questions are waiting (the number in the header)
---   hod_questions    the HoD desk loads every question
---   hod_set_status   the HoD approves, sends back or moves back to waiting
--- and reads `question_bank` directly (Revise). Anyone can read `question_bank`; nobody can write to it but the trigger.
---
--- For now there is no login: anyone with the link can use the HoD desk. Logins will decide who counts as an HoD.
+-- Who can do what:
+--   anyone           reads question_bank, waiting_count() (the number in the header), hod_questions() (the HoD desk list)
+--   signed in        submit_batch(questions): sends a batch, as themselves (name and email from their Google account)
+--   HoDs             hod_set_status(ids, new_status, reason): approve, send back, move back to waiting. An HoD is
+--                    someone signed in with Google whose email is in public.hods. Add one with:
+--                      insert into public.hods (email) values ('name@example.com');
+-- Sign-in is Supabase Auth with Google only (turn the Email provider off, so nobody can claim an email unchecked).
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
@@ -26,11 +24,27 @@ revoke all on schema private from public, anon, authenticated;
 create function private.norm(t text) returns text language sql immutable set search_path = ''
 as $$ select lower(regexp_replace(btrim(t), '\s+', ' ', 'g')) $$;
 
+-- the HoDs, by email (not readable through the API)
+create table public.hods (
+  email text primary key check (email = lower(email)),
+  added_at timestamptz not null default now()
+);
+
+create function private.is_hod() returns boolean language sql stable security definer set search_path = ''
+as $$
+  select coalesce((auth.jwt() -> 'app_metadata' -> 'providers') ? 'google', false)
+     and exists (select 1 from public.hods h where h.email = lower(auth.jwt() ->> 'email'))
+$$;
+
+create function public.am_i_hod() returns boolean language sql stable security definer set search_path = ''
+as $$ select private.is_hod() $$;
+
 -- ---------------------------------------------------------------- tables
 
 create table public.batches (
   batch_id text primary key check (batch_id ~ '^B[0-9]{8}-[0-9]{2,}$'),
   teacher text not null check (char_length(teacher) between 1 and 80),
+  teacher_email text,
   sent_at timestamptz not null default now()
 );
 
@@ -53,6 +67,7 @@ create table public.questions (
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
   note text not null default '' check (char_length(note) <= 500),
   reviewed_at timestamptz,
+  reviewed_by text,
   -- the IDs always agree with the columns
   constraint ids_match check (
     chapter_id ~ ('^[A-Z]{2,5}' || lpad(class::text, 2, '0') || '[A-Z]{3}' || lpad(chapter_no::text, 2, '0') || '$')
@@ -133,23 +148,25 @@ create trigger questions_to_bank after insert or update on public.questions
 
 -- ---------------------------------------------------------------- who can see what
 
+alter table public.hods enable row level security;
 alter table public.batches enable row level security;
 alter table public.questions enable row level security;
 alter table public.question_bank enable row level security;
-revoke all on public.batches, public.questions from anon, authenticated;
+revoke all on public.hods, public.batches, public.questions from anon, authenticated;
 revoke insert, update, delete, truncate, references, trigger on public.question_bank from anon, authenticated;
 create policy "Anyone can read the question bank" on public.question_bank for select to anon, authenticated using (true);
 
 -- ---------------------------------------------------------------- what the website calls
 
--- The formatter sends a teacher's questions. Each needs a chapter ID (the formatter leaves out the ones without).
--- Questions already waiting or approved in the same chapter are skipped. Returns the batch ID, how many were sent and
--- skipped, and the new rows.
-create function public.submit_batch(teacher text, questions jsonb) returns jsonb
+-- The formatter sends the signed-in person's questions as one batch. Each needs a chapter ID (the formatter leaves out
+-- the ones without). Questions already waiting or approved in the same chapter are skipped. Returns the batch ID, how many
+-- were sent and skipped, and the new rows.
+create function public.submit_batch(questions jsonb) returns jsonb
 language plpgsql security definer set search_path = ''
 as $$
 declare
-  who text := btrim(coalesce(teacher, ''));
+  who text := coalesce(nullif(btrim(auth.jwt() -> 'user_metadata' ->> 'full_name'), ''), nullif(btrim(auth.jwt() -> 'user_metadata' ->> 'name'), ''), auth.jwt() ->> 'email');
+  mail text := lower(auth.jwt() ->> 'email');
   day text := to_char(now() at time zone 'Asia/Kolkata', 'YYYYMMDD');
   seq int;
   bid text;
@@ -164,7 +181,8 @@ declare
   already int := 0;
   added jsonb := '[]';
 begin
-  if char_length(who) not between 1 and 80 then raise exception 'Please give your name (up to 80 letters).'; end if;
+  if auth.uid() is null or mail is null then raise exception 'Please sign in first.'; end if;
+  who := left(who, 80);
   if jsonb_typeof(questions) is distinct from 'array' or jsonb_array_length(questions) not between 1 and 500 then
     raise exception 'Send between 1 and 500 questions at a time.';
   end if;
@@ -172,7 +190,7 @@ begin
 
   select coalesce(max(substring(b.batch_id from 11)::int), 0) + 1 into seq from public.batches b where b.batch_id like 'B' || day || '-%';
   bid := 'B' || day || '-' || lpad(seq::text, greatest(2, char_length(seq::text)), '0');
-  insert into public.batches (batch_id, teacher) values (bid, who);
+  insert into public.batches (batch_id, teacher, teacher_email) values (bid, who, mail);
 
   for q in select * from jsonb_array_elements(questions) loop
     cid := q->>'chapter_id';
@@ -222,13 +240,15 @@ declare
   why text := btrim(coalesce(reason, ''));
   done jsonb;
 begin
+  if not private.is_hod() then raise exception 'Only HoDs can approve or send back questions.'; end if;
   if new_status not in ('pending', 'approved', 'rejected') then raise exception 'Unknown status.'; end if;
   if new_status = 'rejected' and why = '' then raise exception 'Say why the question is going back.'; end if;
   with changed as (
     update public.questions q
     set status = new_status,
         note = case when new_status = 'rejected' then why else '' end,
-        reviewed_at = case when new_status = 'pending' then null else now() end
+        reviewed_at = case when new_status = 'pending' then null else now() end,
+        reviewed_by = case when new_status = 'pending' then null else lower(auth.jwt() ->> 'email') end
     where q.question_id = any(ids)
     returning q.question_id, q.status, q.note, q.reviewed_at
   )
@@ -238,7 +258,7 @@ end $$;
 
 revoke execute on function public.submit_batch(text, jsonb), public.waiting_count(), public.hod_questions(),
   public.hod_set_status(text[], text, text) from public;
--- reading is public; writing only with the secret key, which only the site's server (api/write.ts) holds
+-- reading is public; sending needs a sign-in; approving needs an HoD (checked inside hod_set_status)
 grant execute on function public.waiting_count(), public.hod_questions() to anon, authenticated;
-revoke execute on function public.submit_batch(text, jsonb), public.hod_set_status(text[], text, text) from anon, authenticated;
-grant execute on function public.submit_batch(text, jsonb), public.hod_set_status(text[], text, text) to service_role;
+revoke execute on function public.submit_batch(jsonb), public.hod_set_status(text[], text, text), public.am_i_hod() from public, anon;
+grant execute on function public.submit_batch(jsonb), public.hod_set_status(text[], text, text), public.am_i_hod() to authenticated;

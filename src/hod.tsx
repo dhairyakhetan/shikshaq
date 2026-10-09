@@ -1,20 +1,51 @@
 /**
  * The HoD desk: teachers' batches wait here until the HoD approves each question or sends it back with a reason the
  * teacher sees. Approved questions go into the question bank the revision games use. Works on its own: it only reads and
- * writes the database (src/db.ts). There is no login yet: anyone with the link can use it.
+ * writes the database (src/db.ts). Only HoDs can use it: people sign in with Google, and the database checks that their
+ * email is on its HoD list.
  */
-import { StrictMode, useState } from 'react';
+import { StrictMode, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
-import { counts, loadForHod, saveStatus, setStatus, toCSV, toJSON, useLoad, type Bank, type BankQuestion, type Status } from './db';
-import { CheckIcon, DownloadIcon, RowsTable, SectionHeader, useUndo } from './ui';
+import { amIHod, counts, loadForHod, nameOf, saveStatus, setStatus, signIn, signOut, toCSV, toJSON, useLoad, useSession, waitingCount, type Bank, type BankQuestion, type Status } from './db';
+import { CheckIcon, DownloadIcon, GoogleIcon, RowsTable, SectionHeader, useUndo } from './ui';
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const TABS: { key: Status; label: string }[] = [{ key: 'pending', label: 'Waiting' }, { key: 'approved', label: 'Approved' }, { key: 'rejected', label: 'Sent back' }];
 
+/** The page before the desk opens: the title, then a message or a sign-in button. */
+function Gate({ waiting, children }: { waiting: number; children: ReactNode }) {
+  return (
+    <>
+      <SectionHeader here="hod" waiting={waiting} />
+      <main className="page review">
+        <div className="intro enter">
+          <h1>Approve questions</h1>
+          <p>Questions teachers send from the formatter wait here. Only approved questions go into the question bank and the games.</p>
+        </div>
+        <div className="empty-state enter" aria-live="polite">{children}</div>
+      </main>
+    </>
+  );
+}
+
 function HodDesk() {
-  const loaded = useLoad(loadForHod);
+  const session = useSession();
+  const [hod, setHod] = useState<boolean | undefined>(undefined);
+  const who = session === undefined ? undefined : session?.user.id ?? null;
+  useEffect(() => {
+    setHod(undefined);
+    if (who === null) setHod(false);
+    else if (who) amIHod().then(setHod, () => setHod(false));
+  }, [who]);
+  const waiting = useLoad(waitingCount);
+  const [loaded, setLoaded] = useState<{ data?: Bank; error?: string }>({});
+  const load = useCallback(() => {
+    setLoaded((l) => ({ data: l.data }));
+    loadForHod().then((data) => setLoaded({ data }), (e: Error) => setLoaded((l) => ({ data: l.data, error: e.message })));
+  }, []);
+  useEffect(() => { if (hod) load(); }, [hod, load]);
   const [edited, setBank] = useState<Bank | null>(null); // the page's copy once the HoD changes something
   const bank = edited ?? loaded.data;
   const [saveError, setSaveError] = useState('');
@@ -29,27 +60,35 @@ function HodDesk() {
     setSaveError(`That change wasn't saved: ${(e as Error).message}`);
     loadForHod().then(setBank, () => {});
   };
-  const refresh = () => { setBank(null); loaded.reload(); };
+  const refresh = () => { setBank(null); load(); };
 
+  if (session === undefined || (session && hod === undefined)) return <Gate waiting={waiting.data ?? 0}><p>Checking your sign-in…</p></Gate>;
+  if (!session) {
+    return (
+      <Gate waiting={waiting.data ?? 0}>
+        <p><b>Sign in to approve questions.</b> Only HoDs can approve or send back questions.</p>
+        <button type="button" className="btn primary" onClick={() => signIn()}><GoogleIcon /> Sign in with Google</button>
+      </Gate>
+    );
+  }
+  if (!hod) {
+    return (
+      <Gate waiting={waiting.data ?? 0}>
+        <p>You're signed in as <b>{session.user.email}</b>, which isn't on the HoD list. Ask for your email to be added.</p>
+        <button type="button" className="btn quiet" onClick={() => signOut()}>Sign out</button>
+      </Gate>
+    );
+  }
   if (!bank) {
     return (
-      <>
-        <SectionHeader here="hod" />
-        <main className="page review">
-          <div className="intro enter">
-            <h1>Approve questions</h1>
-            <p>Questions teachers send from the formatter wait here. Only approved questions go into the question bank and the games.</p>
-          </div>
-          <div className="empty-state enter" aria-live="polite">
-            {loaded.error ? (
-              <>
-                <p><b>Couldn't load the questions.</b> {loaded.error}</p>
-                <button type="button" className="btn primary" onClick={refresh}>Try again</button>
-              </>
-            ) : <p>Loading the questions…</p>}
-          </div>
-        </main>
-      </>
+      <Gate waiting={waiting.data ?? 0}>
+        {loaded.error ? (
+          <>
+            <p><b>Couldn't load the questions.</b> {loaded.error}</p>
+            <button type="button" className="btn primary" onClick={refresh}>Try again</button>
+          </>
+        ) : <p>Loading the questions…</p>}
+      </Gate>
     );
   }
 
@@ -122,6 +161,7 @@ function HodDesk() {
       <div className="intro enter">
         <h1>Approve questions</h1>
         <p>Questions teachers send from the formatter wait here. Only approved questions go into the question bank and the games.</p>
+        <p className="small muted">Signed in as <b>{nameOf(session)}</b> (HoD). <button type="button" className="linkish" onClick={() => signOut()}>Sign out</button></p>
       </div>
       {saveError && <p className="sent-note warn" role="alert">{saveError}</p>}
 

@@ -3,10 +3,10 @@ import { Fragment, StrictMode, useDeferredValue, useEffect, useLayoutEffect, use
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { checkDetail, DETAIL_KEYS, detailLine, detailsId, LABEL, readDetails, standardDetail, writeDetail, type DetailKey } from './details';
-import { COLUMNS, sendBatch, toCSV, toJSON, toTSV, useLoad, waitingCount } from './db';
+import { COLUMNS, nameOf, sendBatch, signIn, signOut, toCSV, toJSON, toTSV, useLoad, useSession, waitingCount } from './db';
 import { baseName, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from './format';
 import { Guide } from './Guide';
-import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon, RowsTable, SectionHeader, SendIcon, useUndo } from './ui';
+import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon, GoogleIcon, RowsTable, SectionHeader, SendIcon, useUndo } from './ui';
 
 const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: 'Science', chapter: '1: Chemical Reactions' };
 
@@ -28,7 +28,7 @@ function Formatter() {
   /** Bumped when the whole text is replaced (paste, example, clear), so the table plays its entrance again. */
   const [batch, setBatch] = useState(0);
   const { offer, toast } = useUndo();
-  const [teacher, setTeacher] = useState('');
+  const session = useSession();
   const [sent, setSent] = useState<{ batchId: string | null; sent: number; noId: number; already: number } | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
@@ -113,7 +113,7 @@ function Formatter() {
     setSent(null);
     setSendError('');
     try {
-      const result = await sendBatch(teacher, rows);
+      const result = await sendBatch(rows);
       setSent(result);
       if (result.sent) { flash('send'); waiting.reload(); }
     } catch (e) {
@@ -239,12 +239,18 @@ function Formatter() {
             <form className="send" onSubmit={(e) => { e.preventDefault(); send(); }}>
               <h3>3. Send for approval</h3>
               <p className="small muted">Your HoD checks the questions on the HoD desk. Only approved ones go into the question bank and the games.</p>
-              <div className="row">
-                <input type="text" aria-label="Your name" placeholder="Your name" value={teacher} autoComplete="name" onChange={(e) => { setTeacher(e.target.value); setSent(null); setSendError(''); }} />
-                <button type="submit" className={`btn dark${done === 'send' ? ' is-done' : ''}`} disabled={!ready || !teacher.trim() || sending}>
-                  <ActionIcon done={done === 'send'}><SendIcon /></ActionIcon>{sending ? 'Sending…' : ready ? `Send ${plural(ready, 'question')}` : 'Send'}
-                </button>
-              </div>
+              {session === null ? (
+                <div className="row">
+                  <button type="button" className="btn dark" onClick={() => signIn()}><GoogleIcon /> Sign in with Google to send</button>
+                </div>
+              ) : (
+                <div className="row signed-in">
+                  <button type="submit" className={`btn dark${done === 'send' ? ' is-done' : ''}`} disabled={!ready || !session || sending}>
+                    <ActionIcon done={done === 'send'}><SendIcon /></ActionIcon>{sending ? 'Sending…' : ready ? `Send ${plural(ready, 'question')}` : 'Send'}
+                  </button>
+                  {session && <p className="small muted">Sending as <b>{nameOf(session)}</b>. <button type="button" className="linkish" onClick={() => { signOut(); setSent(null); }}>Not you?</button></p>}
+                </div>
+              )}
               {rows.length > ready && <p className="small muted">{plural(rows.length - ready, 'question has', 'questions have')} no chapter ID and can't be sent yet. Fill in the boxes above.</p>}
               {sent && (
                 <p className={`sent-note ${sent.sent ? 'ok' : 'warn'}`} key={JSON.stringify(sent)}>

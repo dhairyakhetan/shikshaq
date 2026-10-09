@@ -14,8 +14,8 @@ students); here the header links them.
    from the approved questions: crossword, word search, matching, fill in the blank. The puzzles are made on the device
    by the games engine (`src/games/`), with no AI, and every one is checked before it is shown.
 
-All questions live in a Supabase database (see "The database" below); nothing is kept in the browser and there is no
-sample data. When the bank is empty, the pages say so.
+All questions live in a Supabase database (see "The database" below); there is no sample data, and when the bank is
+empty the pages say so. Teachers and HoDs sign in with Google; students don't sign in.
 
 ## Commands
 
@@ -38,8 +38,9 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5. Deployed on Vercel from `main` 
 - **Questions and answers are never reworded** by any code. Only numbering, labels, bullets, Markdown and spaces are removed.
 - **Keep the chatbot instructions and the code in step.** `tests/instructions.test.ts` fails if they disagree; change
   `src/instructions.html` in the same commit as the rule.
-- **No browser storage and no sample data.** No `localStorage` or `sessionStorage` anywhere, and never put made-up
-  questions in the code or the database: the pages show only what is in the database.
+- **No browser storage and no sample data.** No `localStorage` or `sessionStorage` of our own; the one exception is the
+  Google sign-in, which Supabase keeps in the browser so people stay signed in. Never put made-up questions in the code
+  or the database: the pages show only what is in the database.
 - **Write invisible characters as escapes** (`'​'`, `' '`), never as the raw character: tools can't match or
   edit them reliably.
 
@@ -53,9 +54,9 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5. Deployed on Vercel from `main` 
 | `hod/index.html`, `play/index.html` | The shells of the HoD desk and Revise pages. |
 | `vite.config.ts` | Vite + React. Three pages (`appType: 'mpa'`, one build input each). The `bake-instructions` plugin replaces `<!--INSTRUCTIONS-->` in `index.html` with `src/instructions.html`. Also the vitest config. |
 | `src/instructions.html` | Instructions for AI assistants: how to get the material, work out board/class/subject/chapter/topics, write short-answer questions, and reply in the exact format the formatter reads. Has `<pre id="format">` and `<pre id="example">`, which the tests parse. |
-| `src/formatter.tsx` | The formatter page. The text (the single source of truth; not saved), the cursor line, which detail box is being typed in, undo, button feedback. Runs `format()`, decides which problems to show (`visibleIssues`), builds the notes, and handles download, copy, "Send for approval" (`sendBatch`; the note shows the new batch ID), smooth scrolling and the phone "jump to results" pill. Also `Editor`, the Questions box: a transparent textarea over an exact copy of its text that carries the red/amber underlines; the copy is kept to the same width and scroll, and the note under it explains the line the cursor is on. |
+| `src/formatter.tsx` | The formatter page. The text (the single source of truth; not saved), the cursor line, which detail box is being typed in, undo, button feedback. Runs `format()`, decides which problems to show (`visibleIssues`), builds the notes, and handles download, copy, "Send for approval" (needs a Google sign-in, `sendBatch`; the batch carries the person's Google name; the note shows the new batch ID), smooth scrolling and the phone "jump to results" pill. Also `Editor`, the Questions box: a transparent textarea over an exact copy of its text that carries the red/amber underlines; the copy is kept to the same width and scroll, and the note under it explains the line the cursor is on. |
 | `src/Guide.tsx` | "How to write your questions", the guide for people at the bottom of the formatter. Board and subject code lists and limits come from the code, so they can't drift. Cards fade in as they scroll into view. |
-| `src/hod.tsx` | The HoD desk. Loads every question when it opens (`loadForHod`); no login yet. Tabs Waiting / Approved / Sent back, batches grouped by chapter and topic, approve or send back per question or per batch, the reason box, rows sliding away, every change saved at once (`saveStatus`) and undoable for a few seconds, "Check for new questions" when nothing is waiting, download of the approved bank. |
+| `src/hod.tsx` | The HoD desk. Sign in with Google, then the database says whether the email is an HoD's (`amIHod`); only then does it load every question (`loadForHod`). Tabs Waiting / Approved / Sent back, batches grouped by chapter and topic, approve or send back per question or per batch, the reason box, rows sliding away, every change saved at once (`saveStatus`) and undoable for a few seconds, "Check for new questions" when nothing is waiting, download of the approved bank. |
 | `src/play.tsx` | Revise. Loads the `question_bank` table (`loadQuestionBank`; says so when it is empty or can't be reached), groups the questions into chapters and topics (`chaptersOf`, ordered by class, subject, chapter), Class and Subject pills, chapter cards (number, name, topics, questions) and topic chips, makes every game the chosen topics allow (only checked puzzles; a game that can't be made is greyed out), "New puzzle" (a new seed). |
 | `src/playgames.tsx` | The four games, playable. Matching: tap a question, then its answer (either side first). Fill in the blank: type in the gap, Enter; "Show answer" after 2 wrong tries. Word search: drag across a word, or tap its first and last letter. Crossword: tap a square and type (a hidden input catches keys and phone keyboards), Backspace, arrows, Enter for the next clue, tap again to switch across/down, Check, Reveal word. Each ends with a "Next puzzle" banner. |
 | `src/ui.tsx` | What the three pages share on screen: `SectionHeader` (the header with links to the three parts and the number waiting), `RowsTable` (rows grouped by chapter and topic with their IDs; rows slide in; optional buttons under each row), `useUndo` (the "Undo" bar), the icons (`ActionIcon` swaps an icon for a check mark without resizing the button) and `Logo`. |
@@ -67,9 +68,8 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5. Deployed on Vercel from `main` 
 
 | File | What it does |
 | --- | --- |
-| `src/db.ts` | The only thing the three parts share. The row (`Row`, `COLUMNS`, `DIFFICULTIES`) and its exports (`toCSV` with no byte-order mark, `toJSON`, `toTSV`). The bank's shapes (`Batch`, `BankQuestion`: a row plus its question ID, batch ID, `status` pending/approved/rejected and the HoD's `note`), `setStatus` and `counts` for the page's own copy. Then the database calls, plain `fetch` to Supabase with the publishable key: `loadQuestionBank`, `waitingCount`, `sendBatch`, `loadForHod`, `saveStatus`, and `useLoad` (load when the page opens). |
-| `api/write.ts` | The site's one server route (a Vercel function). Every write goes through it: `submit_batch` (Send) and `hod_set_status` (approve, send back, undo), called with the Supabase secret key from Vercel's `SUPABASE_SECRET_KEY` environment variable. Not run by `npm run dev`; use `vercel dev` to try writes locally. |
-| `supabase/schema.sql` | The whole database: tables, IDs, the trigger that keeps `question_bank` in step, the security rules and the four functions the pages call. Already applied to the project. |
+| `src/db.ts` | The only thing the three parts share. The row (`Row`, `COLUMNS`, `DIFFICULTIES`) and its exports (`toCSV` with no byte-order mark, `toJSON`, `toTSV`). The bank's shapes (`Batch`, `BankQuestion`: a row plus its question ID, batch ID, `status` pending/approved/rejected and the HoD's `note`), `setStatus` and `counts` for the page's own copy. Then the database calls through the Supabase client with the publishable key: `loadQuestionBank`, `waitingCount`, `sendBatch`, `loadForHod`, `saveStatus`, `amIHod`, `useLoad` (load when the page opens). Then signing in: `useSession`, `signIn` (Google, back to the same page), `signOut`, `nameOf`. |
+| `supabase/schema.sql` | The whole database: tables (with `hods`, the HoD list), IDs, the trigger that keeps `question_bank` in step, the security rules and the functions the pages call. |
 
 ### Formatter logic
 
@@ -115,9 +115,11 @@ Supabase project "dhairyakhetan's Project" (`dfytzracuyiitlqeqszm`). Everything 
 applied. Change the database only by editing that file and running the change in the Supabase SQL editor.
 
 **Tables:**
-- `batches`: one row per "Send for approval": `batch_id`, `teacher`, `sent_at`.
+- `batches`: one row per "Send for approval": `batch_id`, `teacher` (Google name), `teacher_email`, `sent_at`.
 - `questions`: every question ever sent, with `status` pending (waiting), approved or rejected (sent back) and the HoD's
-  `note`. A question already waiting or approved in the same chapter can't be added again.
+  `note`, and `reviewed_by` (the HoD's email). A question already waiting or approved in the same chapter can't be added
+  again.
+- `hods`: the HoD list, by email. Add one with `insert into public.hods (email) values ('name@example.com');`
 - `question_bank`: the clean final table, approved questions only, one row per question with a described column each.
   A trigger keeps it in step with `questions`; nothing else writes to it. This is the table to use elsewhere.
 
@@ -126,17 +128,17 @@ applied. Change the database only by editing that file and running the change in
   topic). The database numbers questions in order within each topic and never reuses a number.
 - Batch: `B20261009-03` = the 3rd batch sent on 9 October 2026 (India time).
 
-**Who can do what.** Row-level security is on. Reading is public: the pages use the publishable key, which can read
-`question_bank` and call `waiting_count()` (the number in the header) and `hod_questions()` (the HoD desk's list).
-Writing is not: `submit_batch(teacher, questions)` (Send: adds a batch as waiting, skips duplicates, gives the IDs) and
-`hod_set_status(ids, new_status, reason)` (approve, send back) only work with the secret key, which only `api/write.ts`
-holds, on Vercel. The secret key is never in the repo or the page.
+**Who can do what.** Row-level security is on, and the database decides, not the page:
+- Anyone: read `question_bank`, `waiting_count()` (the number in the header) and `hod_questions()` (the HoD desk list).
+- Signed in with Google: `submit_batch(questions)` (Send: a batch as themselves, skips duplicates, gives the IDs).
+- HoDs (signed in with Google, email in `hods`): `hod_set_status(ids, new_status, reason)` (approve, send back, move
+  back to waiting), and `am_i_hod()` answers true.
 
-`batches` and `questions` can't be read or written directly with that key. There is no login yet, so anyone with the
-link can use the HoD desk; logins will decide who counts as an HoD.
+`hods`, `batches` and `questions` can't be read or written directly. Sign-in is Supabase Auth with Google only; the
+Email provider must stay off, or someone could claim an HoD's email without proving it.
 
 ## Where this is going
 
-Done: the three pages on a real database. Next: logins (teachers, HoDs, students), so only HoDs can approve, a place for
+Done: the three pages on a real database. Next: a place for
 teachers to see what was sent back and why, and moving the pages into `kushalsetha/Shikshaq`. Never push to their repo
 without the user's OK.

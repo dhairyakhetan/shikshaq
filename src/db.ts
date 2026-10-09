@@ -5,8 +5,10 @@
  *   the revision games read only the approved ones (the question_bank table).
  * None of the three uses another's code; they only agree on the shapes below and talk to the same database.
  *
- * The database is Supabase; its tables, rules and functions are in supabase/schema.sql. Nothing is kept in the browser.
+ * The database is Supabase; its tables, rules and functions are in supabase/schema.sql. The only thing kept in the
+ * browser is the Google sign-in, so people stay signed in.
  */
+import { createClient, type Session } from '@supabase/supabase-js';
 import { useCallback, useEffect, useState } from 'react';
 
 // ---------------------------------------------------------------- a question row
@@ -93,26 +95,25 @@ export const counts = (bank: Bank): Record<Status, number> => ({
 // ---------------------------------------------------------------- talking to the database
 
 /**
- * Reading goes straight to Supabase with the project's publishable key, which is made to be public: it can read the
- * question bank, count what is waiting and load the HoD desk, and nothing else. Writing (sending questions, approving,
- * sending back) goes through the site's own server, api/write.ts, which holds the secret key. The public key can't write.
+ * Supabase, with the project's publishable key, which is made to be public: the database's own rules decide what each
+ * person may do. Anyone can read the question bank, the HoD desk list and the waiting count. Sending needs a Google
+ * sign-in; approving and sending back need an HoD (an email on the database's HoD list).
  */
-const API = 'https://dfytzracuyiitlqeqszm.supabase.co/rest/v1';
-const KEY = 'sb_publishable__njgrg5F1tWacX_O6uSJNA_jSE1ucYg';
+const supabase = createClient('https://dfytzracuyiitlqeqszm.supabase.co', 'sb_publishable__njgrg5F1tWacX_O6uSJNA_jSE1ucYg', {
+  auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+});
 
-async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  let res: Response;
+/** Runs a database call and turns its error into a plain sentence. */
+async function ask<T>(call: PromiseLike<{ data: T | null; error: { message: string } | null }>): Promise<T> {
+  let r: { data: T | null; error: { message: string } | null };
   try {
-    res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...init.headers } });
+    r = await call;
   } catch {
     throw new Error("Couldn't reach the question bank. Check the internet connection and try again.");
   }
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(typeof body?.message === 'string' ? body.message : `The question bank didn't answer (${res.status}). Try again.`);
-  return body as T;
+  if (r.error) throw new Error(/fetch/i.test(r.error.message) ? "Couldn't reach the question bank. Check the internet connection and try again." : r.error.message);
+  return r.data as T;
 }
-const rpc = <T>(fn: string, args: object = {}) => request<T>(`${API}/rpc/${fn}`, { method: 'POST', body: JSON.stringify(args), headers: { apikey: KEY } });
-const write = <T>(fn: 'submit_batch' | 'hod_set_status', args: object) => request<T>('/api/write', { method: 'POST', body: JSON.stringify({ fn, args }) });
 
 /** A row from the questions or question_bank table, with the batch's teacher and date where there is one. */
 interface DbQuestion extends Omit<Row, 'line'> {
@@ -127,37 +128,41 @@ const fromDb = (r: DbQuestion): BankQuestion => ({
 export async function loadQuestionBank(): Promise<BankQuestion[]> {
   const rows: DbQuestion[] = [];
   for (let from = 0; ; from += 1000) {
-    const page = await request<DbQuestion[]>(`${API}/question_bank?select=*&order=class,subject,chapter_no,topic_no,question_no&limit=1000&offset=${from}`, { headers: { apikey: KEY } });
+    const page = await ask<DbQuestion[]>(supabase.from('question_bank').select('*')
+      .order('class').order('subject').order('chapter_no').order('topic_no').order('question_no').range(from, from + 999));
     rows.push(...page);
     if (page.length < 1000) return rows.map(fromDb);
   }
 }
 
 /** The number in the header: questions waiting for the HoD. */
-export const waitingCount = () => rpc<number>('waiting_count');
+export const waitingCount = () => ask<number>(supabase.rpc('waiting_count'));
 
 /**
- * The formatter sends a teacher's questions to wait for the HoD, as one batch. Questions with no chapter ID can't be
- * linked to a chapter, so they aren't sent; the database skips any already waiting or approved in the same chapter, and
- * gives each new question its ID.
+ * The formatter sends the signed-in person's questions to wait for the HoD, as one batch. Questions with no chapter ID
+ * can't be linked to a chapter, so they aren't sent; the database skips any already waiting or approved in the same
+ * chapter, and gives each new question its ID.
  */
-export async function sendBatch(teacher: string, rows: Row[]) {
+export async function sendBatch(rows: Row[]) {
   const ready = rows.filter((r) => r.chapter_id);
-  const r = await write<{ batch_id: string | null; sent: number; already: number }>('submit_batch', { teacher, questions: ready.map(toRecord) });
+  const r = await ask<{ batch_id: string | null; sent: number; already: number }>(supabase.rpc('submit_batch', { questions: ready.map(toRecord) }));
   return { batchId: r.batch_id, sent: r.sent, already: r.already, noId: rows.length - ready.length };
 }
 
 /** The HoD desk: every question, with its batch. */
 export async function loadForHod(): Promise<Bank> {
-  const rows = await rpc<DbQuestion[]>('hod_questions');
+  const rows = await ask<DbQuestion[]>(supabase.rpc('hod_questions'));
   const batches = new Map<string, Batch>();
   for (const r of rows) if (r.batch_id && !batches.has(r.batch_id)) batches.set(r.batch_id, { id: r.batch_id, by: r.teacher ?? '', at: r.sent_at ?? '' });
   return { batches: [...batches.values()], questions: rows.map(fromDb) };
 }
 
-/** The HoD approves, sends back (with a reason) or moves back to waiting. */
+/** The HoD approves, sends back (with a reason) or moves back to waiting. Only works for HoDs. */
 export const saveStatus = (ids: string[], status: Status, reason = '') =>
-  write<{ question_id: string }[]>('hod_set_status', { ids, new_status: status, reason });
+  ask<{ question_id: string }[]>(supabase.rpc('hod_set_status', { ids, new_status: status, reason }));
+
+/** Is the signed-in person on the HoD list? */
+export const amIHod = () => ask<boolean>(supabase.rpc('am_i_hod'));
 
 /** Loads something when the page opens. `reload` fetches again and keeps showing the old data until the new arrives. */
 export function useLoad<T>(load: () => Promise<T>) {
@@ -169,3 +174,22 @@ export function useLoad<T>(load: () => Promise<T>) {
   useEffect(reload, [reload]);
   return { ...state, reload };
 }
+
+// ---------------------------------------------------------------- signing in (Google)
+
+/** The signed-in person: undefined while checking, null when signed out. Stays signed in between visits. */
+export function useSession() {
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => data.subscription.unsubscribe();
+  }, []);
+  return session;
+}
+
+/** Goes to Google and comes back to this page, signed in. */
+export const signIn = () => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+export const signOut = () => supabase.auth.signOut();
+/** The name on the person's Google account (or their email). */
+export const nameOf = (s: Session) => String(s.user.user_metadata?.full_name ?? s.user.user_metadata?.name ?? s.user.email ?? '');

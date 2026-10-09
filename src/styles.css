@@ -131,6 +131,8 @@ a.linkish { color: var(--indigo-deep); }
 /* sending questions for approval (formatter page) */
 .send { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; padding-top: 16px; border-top: 1px solid var(--line); }
 .send h3 { font-size: 19px; line-height: 1.2; }
+.signed-in { align-items: center; }
+.btn svg { flex: none; }
 .send input[type='text'] { flex: 1 1 200px; max-width: 280px; height: 48px; }
 .sent-note { margin: 0; font-size: 15px; }
 .sent-note.ok { color: var(--ok-deep); }

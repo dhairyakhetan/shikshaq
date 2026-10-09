@@ -10,7 +10,7 @@ Three separate parts, each its own page. They work without each other and share 
 
 All questions live in a Supabase database: every question sent, waiting, approved or sent back, and a clean
 `question_bank` table of the approved ones. The tables, rules and functions are in `supabase/schema.sql`. Nothing is kept
-in the browser, and there is no sample data: when the bank is empty, the pages say so. There is no login yet.
+in the browser, and there is no sample data: when the bank is empty, the pages say so. Teachers sign in with Google to send questions, and only HoDs (emails on the database's HoD list) can approve.
 
 The pages use Shikshaq's look (its colours, fonts, pill buttons, shadows and motion timings), so they can move into the
 main site without looking out of place.
