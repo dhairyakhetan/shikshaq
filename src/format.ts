@@ -14,9 +14,8 @@
  */
 import {
   boardClassProblem, chapterId, checkBoard, checkClass, checkNumbered, checkSubject, MAX_NO, plainLine, readMeta, topicId,
-  type Level, type MetaKey, type Problem,
+  tidy, type Level, type MetaKey, type Problem,
 } from './details';
-import { tidy } from './text';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
@@ -377,3 +376,67 @@ export function lineLevels(issues: Issue[]): Map<number, Level> {
   for (const x of issues) if (out.get(x.line) !== 'error') out.set(x.line, x.level);
   return out;
 }
+
+// ---------------------------------------------------------------- output for the database
+
+type Record_ = Record<(typeof COLUMNS)[number], string | number | null>;
+
+/** A row as the database sees it: the columns only, with an empty value as null. */
+export function toRecord(r: Row): Record_ {
+  const out = {} as Record_;
+  for (const c of COLUMNS) out[c] = r[c] === '' ? null : r[c];
+  return out;
+}
+
+/** A header row, then one line per question. */
+function table(rows: Row[], sep: string, cell: (v: string) => string): string {
+  const line = (r: Row) => {
+    const rec = toRecord(r);
+    return COLUMNS.map((c) => cell(String(rec[c] ?? ''))).join(sep);
+  };
+  return [COLUMNS.join(sep), ...rows.map(line)].join('\n');
+}
+
+/** CSV with a header row (RFC 4180 quoting, no byte-order mark), ready to import into a table. */
+export const toCSV = (rows: Row[]) => table(rows, ',', (v) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)) + '\n';
+
+export const toJSON = (rows: Row[]) => JSON.stringify(rows.map(toRecord), null, 2) + '\n';
+
+/** Tab-separated with a header row, for pasting into Google Sheets or Excel. */
+export const toTSV = (rows: Row[]) => table(rows, '\t', (v) => v.replace(/\t/g, ' '));
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/** File name: the chapter ID and name when everything is one chapter ("CBSE10SCI01-chemical-reactions"), else the subject. */
+export function baseName(rows: Row[]): string {
+  const first = rows[0];
+  if (!first) return 'questions';
+  const one = rows.every((r) => r.chapter_id === first.chapter_id && r.chapter === first.chapter);
+  const name = one && first.chapter_id ? [first.chapter_id, slug(first.chapter)].filter(Boolean).join('-') : [slug(first.subject), 'questions'].filter(Boolean).join('-');
+  return name.slice(0, 80).replace(/-$/, '');
+}
+
+/**
+ * "Try an example": the kind of mix people paste, with lower-case names to show they get capitalised,
+ * and one question without an answer to show the red underline.
+ */
+export const EXAMPLE = `Board: cbse
+Class: X
+Subject: science
+Chapter 1: chemical reactions and equations
+
+Topic 1: chemical equations
+1. Equation with the same number of atoms of each element on both sides? Ans: Balanced equation
+2. Q. Which law requires a chemical equation to be balanced?
+Ans. Law of conservation of mass
+
+## Topic 2: types of chemical reactions
+- Reaction in which two or more reactants form a single product | Combination reaction | easy
+- Reaction in which a single reactant breaks down into simpler products = Decomposition reaction
+- Gain of oxygen by a substance during a reaction - Oxidation
+
+Topic 3: effects of oxidation in everyday life
+Q3) Common name for the corrosion of iron? Rusting
+Gas filled in chip packets to keep the chips from going rancid | Nitrogen | easy
+What do fats and oils become when they are oxidised?
+`;

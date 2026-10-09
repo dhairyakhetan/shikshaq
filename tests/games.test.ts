@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { enumeration, gridWord, sameAnswer, type Item } from '../src/games/answers';
+import { enumeration, gridWord, rng, sameAnswer, type Item } from '../src/games/shared';
 import { checkCrossword, makeCrossword, type Crossword } from '../src/games/crossword';
 import { checkFill, type FillIn } from '../src/games/fill';
 import { checkGame, makeGame, makePuzzle, seedOf } from '../src/games';
 import { checkMatching, makeMatching, type Matching } from '../src/games/matching';
-import { rng } from '../src/games/random';
 import { checkWordSearch, makeWordSearch, occurrences, type WordSearch } from '../src/games/wordsearch';
 
 const items = (pairs: [string, string][]): Item[] => pairs.map(([question, answer], i) => ({ id: `q${i + 1}`, question, answer }));

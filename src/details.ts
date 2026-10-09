@@ -6,7 +6,52 @@
  * Topic ID   = chapter ID + "T" + topic number (2 digits): CBSE11CHE01T03.
  * The same details always give the same ID, so questions can be linked to their chapter without looking anything up.
  */
-import { distance, pad2, tidy, titleCase } from './text';
+
+// ---------------------------------------------------------------- text
+
+/** Collapses spaces and removes Markdown bold and wrappers or quotes around the whole text. Never touches the words. */
+export function tidy(s: string): string {
+  let t = s.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+  for (;;) {
+    const m = t.match(/^(__|`|"|“)(.+)(__|`|"|”)$/);
+    if (!m || (m[1] === '“' ? '”' : m[1]) !== m[3]) return t;
+    t = m[2].trim();
+  }
+}
+
+const SMALL = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'from', 'in', 'into', 'nor', 'of', 'on', 'or', 'per', 'than', 'the', 'to', 'via', 'vs', 'with']);
+const ROMAN_WORD = /^(?:ii|iii|iv|vi|vii|viii|ix|xi|xii)$/;
+
+/**
+ * Capitalises the start of each word: "chemical reactions and equations" → "Chemical Reactions and Equations".
+ * Short joining words stay lower case unless they start the name or follow ":", "–" or "(".
+ * Words that already contain a capital or a digit (DNA, pH, CO2) are left as they are; Roman numerals become upper case.
+ */
+export function titleCase(s: string): string {
+  let start = true;
+  return s.replace(/[\p{L}\p{N}][\p{L}\p{N}\p{M}'’]*|[:–—(]|\s-\s/gu, (tok) => {
+    if (/^(?:[:–—(]|\s-\s)$/u.test(tok)) { start = true; return tok; }
+    const first = start;
+    start = false;
+    if (/\d/.test(tok) || tok !== tok.toLowerCase()) return tok;
+    if (ROMAN_WORD.test(tok)) return tok.toUpperCase();
+    if (!first && SMALL.has(tok)) return tok;
+    return tok[0].toUpperCase() + tok.slice(1);
+  });
+}
+
+/** Edit distance (insertions, deletions, substitutions), for "did you mean" hints. */
+export function distance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+export const pad2 = (n: number) => String(n).padStart(2, '0');
 
 export type Level = 'error' | 'warn';
 export interface Problem { level: Level; text: string }

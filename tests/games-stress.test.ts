@@ -4,12 +4,11 @@
  * and how often a game can't be made. `npm test` runs a few hundred sets per kind; `npm run stress` runs many more.
  */
 import { describe, expect, it } from 'vitest';
-import { usable, type Item } from '../src/games/answers';
+import { rng, shuffle, usable, type Item } from '../src/games/shared';
 import { checkGame, GAME_TYPES, makeGame, makePuzzle, TRIES, type Game, type GameType } from '../src/games';
 import { makeCrossword } from '../src/games/crossword';
 import { makeFill } from '../src/games/fill';
 import { makeMatching } from '../src/games/matching';
-import { rng, shuffle } from '../src/games/random';
 import { makeWordSearch } from '../src/games/wordsearch';
 
 const SETS = Number(process.env.STRESS ?? 40);

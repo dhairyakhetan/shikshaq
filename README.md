@@ -23,7 +23,7 @@ and nothing has to be looked up:
 IDs sort by board, class, subject, chapter, topic. Board codes: CBSE, ICSE, ISC, IB, IGCSE, CAIE (Cambridge), NIOS, and two-letter
 state codes (MH, TN, UP, ...). 44 subjects have fixed codes (PHY, CHE, MAT, SCI, ...); any other subject gets one made from its name
 (never one of the fixed codes) and a warning. A question gets no ID until board, class, subject and chapter number are all known.
-The lists live in `src/lib/details.ts`.
+The lists live in `src/details.ts`.
 
 ## The page
 
@@ -124,17 +124,6 @@ npm test
 npm run build      # typecheck + production build into dist/
 ```
 
-```
-src/lib/format.ts            text -> rows, with line-numbered errors and warnings
-src/lib/details.ts           boards, classes, subjects, chapters, topics: reading, checking, codes, IDs, the four boxes
-src/lib/text.ts              tidying, capitalising, edit distance
-src/lib/rows.ts              CSV, JSON, spreadsheet copy, download and clipboard helpers
-src/App.tsx                  the page
-src/components/              Editor (underlined Questions box), RowsTable (grouped preview), Guide (for people)
-src/instructions.html        instructions for chatbots (baked into index.html, hidden from people)
-src/example.ts               "Try an example"
-src/games/                   revision games: makers, checkers, makePuzzle (no website code)
-docs/games.md                the rules of each game and the proof
-```
+Every file and how it works is described in [CLAUDE.md](CLAUDE.md).
 
 The previous Game Maker (crossword, word search and other puzzle builders) is in the git history, up to commit `952a258`.

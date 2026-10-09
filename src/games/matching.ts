@@ -2,8 +2,7 @@
  * Matching: questions on one side, answers on the other, both shuffled. A pair is correct when both sides have the same id.
  * Two questions with the same answer would make it ambiguous, so only one of them is used.
  */
-import { loose, type Item } from './answers';
-import { shuffle } from './random';
+import { loose, shuffle, type Item } from './shared';
 
 export const MATCHING = { min: 3, max: 8 } as const;
 

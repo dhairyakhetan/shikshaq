@@ -6,8 +6,7 @@
  * (forwards and backwards). So a student can never find a word in a second place, and the filler letters never spell
  * an answer by accident. Words that contain each other (ION and IONIC) can't both be hidden, so only one is used.
  */
-import { gridWord, type Item } from './answers';
-import { shuffle } from './random';
+import { gridWord, shuffle, type Item } from './shared';
 
 export const WORDSEARCH = { min: 3, max: 10, minLetters: 3, maxLetters: 12, minSize: 8, maxSize: 15 } as const;
 

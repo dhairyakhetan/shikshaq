@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { BOARDS, MAX_NAME, MAX_NO, STATES, SUBJECTS } from '../lib/details';
-import { MAX_ANSWER, MAX_QUESTION } from '../lib/format';
+import { BOARDS, MAX_NAME, MAX_NO, STATES, SUBJECTS } from './details';
+import { MAX_ANSWER, MAX_QUESTION } from './format';
 
 /** How to write questions for this site: for people. (Chatbots get their own instructions in the page's HTML.) */
 export function Guide() {

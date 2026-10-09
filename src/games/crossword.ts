@@ -6,8 +6,7 @@
  * into one grid; and clue numbers follow reading order. Not every answer always fits: the ones that can't cross the
  * others are left out of that crossword, and a crossword with fewer than three answers is not made at all.
  */
-import { enumeration, gridWord, type Item } from './answers';
-import { shuffle } from './random';
+import { enumeration, gridWord, shuffle, type Item } from './shared';
 
 export const CROSSWORD = { min: 3, max: 12, minLetters: 3, maxLetters: 15, maxSize: 15 } as const;
 

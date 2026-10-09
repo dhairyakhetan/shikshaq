@@ -6,16 +6,15 @@
  * checker; if a made puzzle fails its check, it is made again with another seed, and if a game still can't be made,
  * the next game is tried. A student can't be shown a broken puzzle: at worst, a different game.
  */
-import { usable, type Item } from './answers';
+import { rng, usable, type Item } from './shared';
 import { checkCrossword, makeCrossword, type Crossword } from './crossword';
 import { checkFill, makeFill, type FillIn } from './fill';
 import { checkMatching, makeMatching, type Matching } from './matching';
-import { rng } from './random';
 import { checkWordSearch, makeWordSearch, type WordSearch } from './wordsearch';
 
-export type { Item } from './answers';
-export { sameAnswer } from './answers';
-export { seedOf } from './random';
+export type { Item } from './shared';
+export { sameAnswer } from './shared';
+export { seedOf } from './shared';
 
 export type Game = Matching | FillIn | WordSearch | Crossword;
 export type GameType = Game['type'];

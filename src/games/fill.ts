@@ -6,8 +6,7 @@
  *   "end"   - otherwise the gap goes after the question ("SI unit of force? ____").
  * A question that would still show its own answer is not used.
  */
-import { loose, type Item } from './answers';
-import { shuffle } from './random';
+import { loose, shuffle, type Item } from './shared';
 
 export const FILL = { min: 1, max: 10 } as const;
 
