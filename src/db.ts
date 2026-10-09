@@ -5,10 +5,11 @@
  *   the revision games read only the approved ones (the question_bank table).
  * None of the three uses another's code; they only agree on the shapes below and talk to the same database.
  *
- * The database is Supabase; its tables, rules and functions are in supabase/schema.sql. The only thing kept in the
- * browser is the Google sign-in, so people stay signed in.
+ * The database is Supabase; its tables, rules and functions are in supabase/schema.sql. The browser keeps only the
+ * Google sign-in (so people stay signed in); the profile page keeps its avatar and bio there too.
  */
-import { createClient, type Session } from '@supabase/supabase-js';
+import { AuthClient, type Session } from '@supabase/auth-js';
+import { PostgrestClient } from '@supabase/postgrest-js';
 import { useCallback, useEffect, useState } from 'react';
 
 // ---------------------------------------------------------------- a question row
@@ -99,8 +100,22 @@ export const counts = (bank: Bank): Record<Status, number> => ({
  * person may do. Everything needs a Google sign-in. Anyone signed in can read and send questions; approving and sending
  * back need an HoD or the admin (an email in the database's roles table).
  */
-const supabase = createClient('https://dfytzracuyiitlqeqszm.supabase.co', 'sb_publishable__njgrg5F1tWacX_O6uSJNA_jSE1ucYg', {
-  auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+const PROJECT = 'https://dfytzracuyiitlqeqszm.supabase.co';
+const KEY = 'sb_publishable__njgrg5F1tWacX_O6uSJNA_jSE1ucYg';
+// only the two parts of Supabase the site uses (sign-in and the database), which keeps the page small
+const auth = new AuthClient({
+  url: `${PROJECT}/auth/v1`, headers: { apikey: KEY }, storageKey: 'sb-dfytzracuyiitlqeqszm-auth-token',
+  flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true,
+});
+const supabase = new PostgrestClient(`${PROJECT}/rest/v1`, {
+  headers: { apikey: KEY },
+  // every database call carries the signed-in person's pass, so the database knows who is asking
+  fetch: async (input, init) => {
+    const token = (await auth.getSession()).data.session?.access_token;
+    const headers = new Headers(init?.headers);
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return fetch(input, { ...init, headers });
+  },
 });
 
 /** Runs a database call and turns its error into a plain sentence. */
@@ -195,15 +210,15 @@ export function useLoad<T>(load: () => Promise<T>) {
 export function useSession() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    auth.getSession().then(({ data }) => setSession(data.session));
+    const { data } = auth.onAuthStateChange((_event, s) => setSession(s));
     return () => data.subscription.unsubscribe();
   }, []);
   return session;
 }
 
 /** Goes to Google and comes back to this page, signed in. */
-export const signIn = () => supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
-export const signOut = () => supabase.auth.signOut();
+export const signIn = () => auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+export const signOut = () => auth.signOut();
 /** The name on the person's Google account (or their email). */
 export const nameOf = (s: Session) => String(s.user.user_metadata?.full_name ?? s.user.user_metadata?.name ?? s.user.email ?? '');

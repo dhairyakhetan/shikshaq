@@ -12,6 +12,18 @@ export const SendIcon = () => <svg {...base}><path d="M4 12h15M13 6l6 6-6 6" /><
 export const SignOutIcon = () => <svg {...base}><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" /></svg>;
 export const ArrowDownIcon = () => <svg {...base}><path d="M12 5v14M6 13l6 6 6-6" /></svg>;
 
+/** Saves text as a file on the person's device. */
+export function download(name: string, text: string, mime: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: `${mime};charset=utf-8` }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 /** An icon that turns into a check mark for a moment after the action worked, without changing the button's size. */
 export function ActionIcon({ done, children }: { done: boolean; children: ReactNode }) {
   return (

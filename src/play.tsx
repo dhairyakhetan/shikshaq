@@ -1,13 +1,14 @@
 /**
  * Revise: the students' part. It reads only approved questions from the database (src/db.ts); the student picks a
- * class, subject and chapter, and the topics they studied, and a puzzle is made from those questions on their device by src/games, which
- * checks every puzzle before it is shown. Works on its own: no formatter or HoD desk code.
+ * class, subject and chapter, and the topics they studied, and a puzzle is made from those questions on their device by
+ * src/games, which checks every puzzle before it is shown. Works on its own: no formatter or HoD desk code.
  */
 import { useMemo, useState } from 'react';
 import { loadQuestionBank, useLoad, type BankQuestion } from './db';
 import { GAME_TYPES, makeGame, seedOf, type Game, type GameType, type Item } from './games';
 import { GameView } from './playgames';
 
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 const NAMES: Record<GameType, string> = { crossword: 'Crossword', wordsearch: 'Word search', matching: 'Matching', fill: 'Fill in the blank' };
 
 interface Topic { key: string; no: number | null; name: string; count: number }
@@ -75,7 +76,6 @@ export function Revise() {
   };
 
   return (
-    <>
       <main className="page play">
         <div className="intro enter">
           <h1>Revise</h1>
@@ -127,7 +127,7 @@ export function Revise() {
                       <button type="button" className={`chapter${c.id === chapter.id ? ' on' : ''}`} aria-pressed={c.id === chapter.id} onClick={() => open(c)}>
                         <span className="ch-no">Chapter {c.no}</span>
                         <b>{c.name}</b>
-                        <span className="small muted">{c.topics.length} topics · {c.questions.length} questions</span>
+                        <span className="small muted">{plural(c.topics.length, 'topic')} · {plural(c.questions.length, 'question')}</span>
                       </button>
                     </li>
                   ))}
@@ -163,6 +163,5 @@ export function Revise() {
           </>
         )}
       </main>
-    </>
   );
 }

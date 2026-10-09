@@ -4,7 +4,7 @@ import { checkDetail, DETAIL_KEYS, detailLine, detailsId, LABEL, readDetails, st
 import { COLUMNS, sendBatch, toCSV, toJSON, toTSV } from './db';
 import { baseName, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from './format';
 import { Guide } from './Guide';
-import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon, Link, RowsTable, SendIcon, useUndo } from './ui';
+import { ActionIcon, ArrowDownIcon, CopyIcon, download, DownloadIcon, Link, RowsTable, SendIcon, useUndo } from './ui';
 
 const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: 'Science', chapter: '1: Chemical Reactions' };
 
@@ -271,7 +271,7 @@ export function Formatter({ teacher, onSent }: { teacher: string; onSent: () => 
  * padding and width: the copy is invisible except for the underlines on lines with a problem. The two scroll together.
  * Moving the cursor onto an underlined line shows why it is underlined.
  */
-export function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret }: {
+function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret }: {
   value: string;
   onChange: (v: string) => void;
   onPaste: () => void;
@@ -345,17 +345,6 @@ export function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, car
       </p>
     </>
   );
-}
-
-function download(name: string, text: string, mime: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: `${mime};charset=utf-8` }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 async function copyText(text: string): Promise<boolean> {

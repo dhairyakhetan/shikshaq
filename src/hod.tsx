@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { counts, loadForHod, saveStatus, setStatus, toCSV, toJSON, type Bank, type BankQuestion, type Status } from './db';
-import { CheckIcon, DownloadIcon, Link, RowsTable, useUndo } from './ui';
+import { CheckIcon, download, DownloadIcon, Link, RowsTable, useUndo } from './ui';
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -126,7 +126,6 @@ export function HodDesk({ canApprove, onChange }: { canApprove: boolean; onChang
     .reverse(); // newest first
 
   return (
-    <>
     <main className="page review">
       <div className="intro enter">
         <h1>Approve questions</h1>
@@ -176,12 +175,12 @@ export function HodDesk({ canApprove, onChange }: { canApprove: boolean; onChang
             <div className="batch-head">
               <p className="small muted">This is the question bank: what the games use.</p>
               <div className="row">
-                <button type="button" className="btn small primary" onClick={() => save('approved-questions.csv', toCSV(shown), 'text/csv')}><DownloadIcon /> Download CSV</button>
-                <button type="button" className="btn small" onClick={() => save('approved-questions.json', toJSON(shown), 'application/json')}><DownloadIcon /> Download JSON</button>
+                <button type="button" className="btn small primary" onClick={() => download('approved-questions.csv', toCSV(shown), 'text/csv')}><DownloadIcon /> Download CSV</button>
+                <button type="button" className="btn small" onClick={() => download('approved-questions.json', toJSON(shown), 'application/json')}><DownloadIcon /> Download JSON</button>
               </div>
             </div>
           )}
-          <RowsTable rows={[...shown].sort((x, y) => (x.chapter_id ?? '').localeCompare(y.chapter_id ?? '') || (x.topic_no ?? 0) - (y.topic_no ?? 0))} keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} />
+          <RowsTable rows={[...shown].sort((x, y) => (x.chapter_id ?? '').localeCompare(y.chapter_id ?? '') || (x.topic_no ?? 0) - (y.topic_no ?? 0) || x.question_no - y.question_no)} keyOf={(q) => q.id} extra={rowActions} rowClass={rowClass} />
         </section>
       ) : (
         <div className="empty-state enter"><p>{tab === 'approved' ? 'No approved questions yet.' : 'Nothing has been sent back.'}</p></div>
@@ -189,17 +188,5 @@ export function HodDesk({ canApprove, onChange }: { canApprove: boolean; onChang
 
       <div className="floating" aria-live="polite">{toast}</div>
     </main>
-    </>
   );
-}
-
-function save(name: string, text: string, mime: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: `${mime};charset=utf-8` }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

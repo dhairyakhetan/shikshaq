@@ -29,29 +29,9 @@
       ]
     }
   ],
-  "redirects": [
-    {
-      "source": "/review",
-      "destination": "/hod/",
-      "permanent": false
-    },
-    {
-      "source": "/review/",
-      "destination": "/hod/",
-      "permanent": false
-    }
-  ],
   "rewrites": [
     {
-      "source": "/hod/",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/play/",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/profile/",
+      "source": "/(hod|play|profile)/",
       "destination": "/index.html"
     }
   ]

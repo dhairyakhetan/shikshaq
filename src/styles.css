@@ -46,7 +46,6 @@ code { font-family: var(--mono); background: var(--soft); padding: 1px 6px; bord
 .nav-link, .top-link { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: none; color: var(--prose); font-weight: 500; font-size: 14px; text-decoration: none; transition: background-color 200ms ease, color 200ms ease; }
 .nav-link.on { background: var(--ink); color: var(--bg); font-weight: 600; }
 .badge { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--brand); color: var(--ink); font-size: 12px; font-weight: 700; line-height: 1.5; text-align: center; }
-.nav .top-link { margin-left: 4px; }
 .top-left .top-link { text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--line-strong); white-space: nowrap; }
 
 .page { max-width: 1200px; margin: 0 auto; padding: 32px 20px 72px; display: flex; flex-direction: column; gap: 24px; }
@@ -142,8 +141,6 @@ a.linkish { color: var(--indigo-deep); }
 .sent-note.warn { color: var(--brand-deep); }
 
 /* the HoD desk */
-.demo { margin: 0; padding: 12px 16px; border-radius: 12px; background: var(--brand-tint); color: var(--brand-deep); font-size: 14px; font-weight: 400; }
-.demo .linkish { color: var(--brand-deep); }
 .tabs { display: flex; flex-wrap: wrap; gap: 8px; }
 .tab { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: var(--card); box-shadow: var(--shadow-border); color: var(--prose); font-weight: 600; font-size: 15px; transition: background-color 200ms ease, box-shadow 200ms ease, color 200ms ease; }
 .tab.on { background: var(--ink); color: var(--bg); box-shadow: none; }
@@ -166,6 +163,7 @@ a.linkish { color: var(--indigo-deep); }
 .review .rows { max-height: none; }
 
 /* Revise: picking topics */
+select { height: 46px; padding: 0 12px; font-size: 16px; font-weight: 500; }
 .picker h2 { font-size: 21px; line-height: 1.2; }
 .pick-top { display: flex; flex-wrap: wrap; gap: 12px 32px; }
 .pick-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
