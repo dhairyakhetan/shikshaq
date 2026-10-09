@@ -10,8 +10,9 @@
 --   batch_id     B20261009-03 = the 3rd batch sent on 9 October 2026 (India time)
 --
 -- Who can do what (sign-in is Supabase Auth with Google only; keep the Email provider off, so nobody can claim an
--- email without proving it). Nothing at all is readable without signing in.
---   member    anyone signed in (saved in public.roles the first time they open the site): reads question_bank;
+-- email without proving it).
+--   anyone    reads question_bank (approved questions only), even without signing in; nothing else
+--   member    anyone signed in (saved in public.roles the first time they open the site):
 --             submit_batch(questions) sends a batch as themselves
 --   hod       also the HoD desk: hod_questions(), waiting_count(), and hod_set_status(ids, new_status, reason) to
 --             approve, send back, or move back to waiting
@@ -212,8 +213,9 @@ alter table public.batches enable row level security;
 alter table public.questions enable row level security;
 alter table public.question_bank enable row level security;
 revoke all on public.roles, public.batches, public.questions from anon, authenticated;
-revoke insert, update, delete, truncate, references, trigger on public.question_bank from anon, authenticated;
-create policy "Signed-in people can read the question bank" on public.question_bank for select to authenticated using (true);
+revoke all on public.question_bank from anon, authenticated;
+grant select on public.question_bank to anon, authenticated;
+create policy "Anyone can read the question bank" on public.question_bank for select to anon, authenticated using (true);
 
 -- ---------------------------------------------------------------- what the website calls
 

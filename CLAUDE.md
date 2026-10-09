@@ -131,17 +131,17 @@ applied. Change the database only by editing that file and running the change in
   topic). The database numbers questions in order within each topic and never reuses a number.
 - Batch: `B20261009-03` = the 3rd batch sent on 9 October 2026 (India time).
 
-**Who can do what.** Row-level security is on, and the database decides, not the page. Nothing is readable without a
-Google sign-in.
-- Member (anyone signed in): read `question_bank` and `submit_batch(questions)` (Send: a batch as themselves, skips
-  duplicates, gives the IDs).
+**Who can do what.** Row-level security is on, and the database decides, not the page.
+- Anyone, even without signing in: read `question_bank` (approved questions only). Nothing else.
+- Member (anyone signed in): also `submit_batch(questions)` (Send: a batch as themselves, skips duplicates, gives the
+  IDs).
 - HoD: also the HoD desk: `hod_questions()` (the list), `waiting_count()` and `hod_set_status(ids, new_status, reason)`
   (approve, send back, move back to waiting).
 - Admin: also `admin_people()`, `admin_set_role(email, role)`, `admin_remove(email)`; the site shows them Revise. An
   admin can't remove themselves or take away their own admin role.
 - `my_role()` runs every time the site opens: it saves a new person as a member and returns their role.
 
-`roles`, `batches` and `questions` can't be read or written directly. Sign-in is Supabase Auth with Google only; the
+`roles`, `batches` and `questions` can't be read or written directly, and `question_bank` can't be written. Sign-in is Supabase Auth with Google only; the
 Email provider must stay off, or someone could claim an HoD's email without proving it.
 
 ## Where this is going
