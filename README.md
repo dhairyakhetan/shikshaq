@@ -77,5 +77,4 @@ src/instructions.html        instructions for chatbots (baked into index.html, h
 src/example.ts               "Try an example"
 ```
 
-The rest of `src/components`, `src/lib`, `src/sample.ts`, `src/types.ts`, `supabase/` and the other tests are left over from the
-previous Game Maker (crossword, word search and other puzzle builders). The site no longer uses them.
+The previous Game Maker (crossword, word search and other puzzle builders) is in the git history, up to commit `952a258`.
