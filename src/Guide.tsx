@@ -29,7 +29,7 @@ export function Guide() {
           <ol className="steps">
             <li><b>Fill in Board, Class, Subject and Chapter.</b> They are written at the top of the Questions box for you, and you can edit them in either place.</li>
             <li><b>Add a Topic line, then one question per line</b>, with a bar between the question and the answer.</li>
-            <li><b>Fix anything underlined</b>, check the table, then <b>Download CSV</b>.</li>
+            <li><b>Fix anything underlined</b>, check the table, then <b>send it for approval</b> (or download it). Your HoD approves it on the Approve page; only approved questions are used in the games.</li>
           </ol>
           <pre className="sample">{`Board: CBSE
 Class: 10

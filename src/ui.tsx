@@ -1,12 +1,13 @@
 /** The parts of the page: the Questions box with its underlines, the grouped table of rows, and icons. */
-import { Fragment, useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { lineLevels, type Issue, type Row } from './format';
 
 const base = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true } as const;
 
 export const DownloadIcon = () => <svg {...base}><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>;
 export const CopyIcon = () => <svg {...base}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></svg>;
-const CheckIcon = () => <svg {...base} strokeWidth={2.8}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
+export const CheckIcon = () => <svg {...base} strokeWidth={2.8}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
+export const SendIcon = () => <svg {...base}><path d="M4 12h15M13 6l6 6-6 6" /></svg>;
 export const ArrowDownIcon = () => <svg {...base}><path d="M12 5v14M6 13l6 6 6-6" /></svg>;
 
 /** An icon that turns into a check mark for a moment after the action worked, without changing the button's size. */
@@ -101,7 +102,14 @@ export function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, car
 }
 
 /** The rows as they will be stored, grouped under a heading for each chapter and topic. */
-export function RowsTable({ rows }: { rows: Row[] }) {
+export function RowsTable<R extends Row>({ rows, keyOf = (_r, i) => i, extra, rowClass }: {
+  rows: R[];
+  /** A stable key per row, so rows that leave or arrive don't disturb the others. */
+  keyOf?: (r: R, i: number) => string | number;
+  /** Buttons or a note shown under a row (the Approve page). */
+  extra?: (r: R) => ReactNode;
+  rowClass?: (r: R) => string;
+}) {
   // Rows slide in as they are added. On the first render (a paste, the example) they come in one after another,
   // briefly; later only a newly added row animates, and only once.
   const first = useRef(true);
@@ -137,15 +145,34 @@ export function RowsTable({ rows }: { rows: Row[] }) {
       );
     }
     out.push(
-      <div className="qrow enter" style={delay(shown++)} key={i}>
+      <div className={`qrow enter ${rowClass?.(r) ?? ''}`} style={delay(shown++)} key={keyOf(r, i)}>
         <span className="n">{r.question_no}</span>
         <span className="q">{r.question}</span>
         <span className="a">{r.answer}</span>
         {r.difficulty && <span className={`d ${r.difficulty}`}>{r.difficulty}</span>}
+        {extra && <div className="x">{extra(r)}</div>}
       </div>,
     );
   });
   return <div className="rows">{out}</div>;
+}
+
+/** "Undo" for a few seconds after an action, instead of asking "are you sure?". Render `toast` in a `.floating` box. */
+export function useUndo() {
+  const [undo, setUndo] = useState<{ what: string; restore: () => void } | null>(null);
+  const timer = useRef(0);
+  const offer = (what: string, restore: () => void) => {
+    setUndo({ what, restore });
+    clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setUndo(null), 7000);
+  };
+  const toast = undo && (
+    <div className="toast" key="undo">
+      <span>{undo.what}.</span>
+      <button type="button" className="toast-btn" onClick={() => { undo.restore(); setUndo(null); }}>Undo</button>
+    </div>
+  );
+  return { offer, toast };
 }
 
 export function Logo() {

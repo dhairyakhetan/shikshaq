@@ -3,9 +3,12 @@
 Two things live in this repo, both for **Shikshaq** (shikshaq.in; its main code is `kushalsetha/Shikshaq`, a React + Vite +
 Supabase app):
 
-1. **Question Formatter** (the website): people paste questions and answers in any format and download clean rows for
-   the question bank, each linked to its chapter and topic by an ID. Chatbots that fetch the page get hidden instructions
-   for writing questions in the right format.
+1. **Question Formatter** (the website, two pages):
+   - `/` **Format**: people paste questions and answers in any format and get clean rows for the question bank, each
+     linked to its chapter and topic by an ID. They download them or send them to the HoD for approval. Chatbots that
+     fetch the page get hidden instructions for writing questions in the right format.
+   - `/review` **Approve**: the HoD approves questions or sends them back with a reason. Approved questions are the
+     question bank. A demo for now: saved in the browser, shaped like the planned Shikshaq tables.
 2. **Revision games engine** (`src/games/`): makes crossword, word search, matching and fill-in-the-blank puzzles from
    bank questions on the student's device, with no AI. Not used by the website yet; it will go into Shikshaq.
 
@@ -42,12 +45,13 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5. Deployed on Vercel from `main` 
 | `index.html` | The page shell. `<div id="app">` is where React draws. `<main id="for-ai">` holds the chatbot instructions (baked in at build). A one-line script in `<head>` adds the `js` class before the first paint, and `.js #for-ai { display: none }` hides the instructions from people. No `hidden` attribute on purpose: some fetchers drop hidden elements. |
 | `vite.config.ts` | Vite + React, plus the `bake-instructions` plugin that replaces `<!--INSTRUCTIONS-->` in `index.html` with `src/instructions.html`. Also the vitest config. |
 | `src/instructions.html` | Instructions for AI assistants: how to get the material, work out board/class/subject/chapter/topics, write short-answer questions, and reply in the exact format the formatter reads. Has `<pre id="format">` and `<pre id="example">`, which the tests parse. |
-| `src/main.tsx` | The page (`App`) and its startup. Holds all page state: the text (the single source of truth, saved in `localStorage` key `question-formatter:v1`), the cursor line, which detail box is being typed in, undo, button feedback. Runs `format()` on the text, decides which problems to show (`visibleIssues`), builds the notes, and handles download, copy, undo, smooth scrolling and the phone "jump to results" pill. |
-| `src/ui.tsx` | Parts of the page: `Editor` (the Questions box: a transparent textarea over an exact copy of its text that carries the red/amber underlines; the copy is kept to the same width and scroll, and the note under it explains the line the cursor is on), `RowsTable` (rows grouped by chapter and topic with their IDs; rows slide in), the button icons (`ActionIcon` swaps an icon for a check mark without resizing the button) and `Logo`. |
+| `src/main.tsx` | Startup and the two pages. `App` picks the page from the address (`/` or `/review`, with `pushState` and the back button), draws the shared header (Format / Approve with the number waiting), and holds the question bank (`useBank`). `Formatter` is the Format page: the text (the single source of truth, saved in `localStorage` key `question-formatter:v1`), the cursor line, which detail box is being typed in, undo, button feedback; it runs `format()`, decides which problems to show (`visibleIssues`), builds the notes, and handles download, copy, "Send for approval" (teacher's name kept in `question-formatter:name`), smooth scrolling and the phone "jump to results" pill. |
+| `src/review.tsx` | The Approve page and the question bank behind it. Pure functions first (`addBatch`: a teacher's batch, skipping questions with no chapter ID or already waiting/approved; `setStatus`: approve, send back with a reason, or move back to waiting; `counts`), then `useBank` (kept in `localStorage` key `question-bank:v1`, in step across tabs), then `ReviewPage`: tabs Waiting / Approved / Sent back, batches grouped by chapter and topic, approve or send back per question or per batch, the reason box, rows sliding away, undo for every action, "Add a sample batch", download of the approved bank. To move to Shikshaq's database, replace `useBank`'s storage; the shapes (`Batch`, `BankQuestion`) match the planned tables. |
+| `src/ui.tsx` | Parts both pages use: `Editor` (the Questions box: a transparent textarea over an exact copy of its text that carries the red/amber underlines; the copy is kept to the same width and scroll, and the note under it explains the line the cursor is on), `RowsTable` (rows grouped by chapter and topic with their IDs; rows slide in; optional buttons under each row and stable keys, used by the Approve page), `useUndo` (the "Undo" bar), the icons (`ActionIcon` swaps an icon for a check mark without resizing the button) and `Logo`. |
 | `src/Guide.tsx` | "How to write your questions", the guide for people at the bottom of the page. Board and subject code lists and limits come from the code, so they can't drift. Cards fade in as they scroll into view. |
 | `src/styles.css` | All styling. Colours are variables on `:root`. The motion section at the end: no overshoot, only transform and opacity animate, and "reduce motion" turns sliding and scaling off (`--rise`, `--press`, `--pop` become 0/1). |
 | `public/favicon.svg` | Tab icon. |
-| `vercel.json` | Security headers, and long caching for hashed files in `/assets/`. |
+| `vercel.json` | Security headers, long caching for hashed files in `/assets/`, and `/review` served by `index.html`. |
 
 ### Formatter logic
 
@@ -74,7 +78,7 @@ it. The rules are explained for people in `docs/games.md`.
 
 | File | What it checks |
 | --- | --- |
-| `tests/formatter.test.ts` | `format()`: every input shape, wording kept, detail lines and tables, topic numbering, IDs, every kind of problem and its level, `visibleIssues`, output round-trips (its own CSV and TSV read back unchanged). `details.ts`: capitalising, boards, classes, subjects, codes, the four boxes (every keystroke round-trips). |
+| `tests/formatter.test.ts` | `format()`: every input shape, wording kept, detail lines and tables, topic numbering, IDs, every kind of problem and its level, `visibleIssues`, output round-trips (its own CSV and TSV read back unchanged). `details.ts`: capitalising, boards, classes, subjects, codes, the four boxes (every keystroke round-trips). `review.tsx`: sending batches, no duplicates, approving, sending back, resending. |
 | `tests/instructions.test.ts` | The chatbot instructions agree with the code (columns, IDs, boards, limits, difficulty words, page labels); the template, worked example and the guide's example parse with no warnings; the hide-from-people setup in `index.html` and the build plugin. |
 | `tests/games.test.ts` | Each game on real questions; determinism; fallbacks; and **every checker is shown deliberately broken puzzles and must catch each one**, which is what makes the stress results mean something. |
 | `tests/games-stress.test.ts` | Ordinary and nasty question sets (words inside words, A/B-only words, palindromes, long answers, digits and Hindi, duplicates and blanks) through every game, with a report table. `STRESS=n` sets the number of sets per kind (default 40; `npm run stress` uses 2,500). |
@@ -91,6 +95,6 @@ it. The rules are explained for people in `docs/games.md`.
 
 Planned order for the games: (1–4 done) rules, makers, checkers, stress proof → (5) game picker for the topics a student
 studied → (6) playable games (tap-to-match, typing into a crossword, swiping in a word search) on a demo page here →
-(7) test with real chapters made with the formatter → (8) into `kushalsetha/Shikshaq` as a pull request: a questions
-table with HoD approval (Kanishk sets up the tables), a "Revise" page, behind login. Never push to their repo without
+(7) test with real chapters made with the formatter → (8) into `kushalsetha/Shikshaq` as a pull request: the questions
+and batches tables behind the Approve page (Kanishk sets up the tables and who counts as an HoD), a "Revise" page, behind login. Never push to their repo without
 the user's OK.

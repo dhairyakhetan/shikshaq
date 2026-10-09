@@ -49,6 +49,14 @@ The lists live in `src/details.ts`.
 - **How to write your questions**: a guide for people at the bottom of the page (formats, detail lines, good questions, what the
   underlines mean, the IDs, board and subject codes, starting from notes).
 
+## Approval (`/review`)
+
+Teachers press **Send for approval** (with their name) on the Format page. On the **Approve** page the HoD sees each batch,
+grouped by chapter and topic, and approves questions or sends them back with a reason the teacher sees, one by one or the
+whole batch; every action can be undone. **Approved** is the question bank the games use, and downloads as CSV or JSON.
+A question with no chapter ID can't be sent, and one already waiting or approved isn't sent twice. For now this is a demo
+saved in the browser (`localStorage`); in Shikshaq only HoDs will see it and it will be saved in the database.
+
 ## What it reads
 
 | Shape | Example |

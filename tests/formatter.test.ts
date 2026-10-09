@@ -6,6 +6,7 @@ import {
 import {
   baseName, EXAMPLE, format, lineLevels, MAX_ANSWER, MAX_QUESTION, missing, NO_ANSWER, toCSV, toJSON, toRecord, toTSV, visibleIssues,
 } from '../src/format';
+import { addBatch, counts, EMPTY_BANK, setStatus } from '../src/review';
 
 const qa = (raw: string) => format(raw).rows.map((r) => [r.question, r.answer]);
 const HEAD = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Matter\n';
@@ -388,5 +389,50 @@ describe('the four boxes and the text', () => {
     expect(standardDetail('chapter', 'chapter 3 - acids, bases and salts')).toBe('3: Acids, Bases and Salts');
     expect(detailsId({ board: 'cbse', class: '11th', subject: 'chem', chapter: '1: Some basic concepts' })).toBe('CBSE11CHE01');
     expect(detailsId({ board: 'cbse', class: '11th', subject: 'chem', chapter: 'Some basic concepts' })).toBeNull();
+  });
+});
+
+describe('approval (the question bank behind the Approve page)', () => {
+  let n = 0;
+  const id = () => `id${++n}`;
+  const rows = format(EXAMPLE).rows; // 7 questions, all with a chapter ID
+  const at = '2026-10-09T10:00:00.000Z';
+
+  it('sends a batch of questions to wait for the HoD', () => {
+    const r = addBatch(EMPTY_BANK, rows, '  Ms Sharma ', at, id);
+    expect([r.sent, r.already, r.noId]).toEqual([7, 0, 0]);
+    expect(r.bank.batches).toEqual([{ id: r.bank.questions[0].batch, by: 'Ms Sharma', at }]);
+    expect(r.bank.questions.every((q) => q.status === 'pending' && q.note === '' && q.reviewedAt === null)).toBe(true);
+    expect(new Set(r.bank.questions.map((q) => q.id)).size).toBe(7);
+    expect(r.bank.questions[0]).toMatchObject({ chapter_id: 'CBSE10SCI01', topic_id: 'CBSE10SCI01T01', question: rows[0].question, answer: rows[0].answer });
+  });
+
+  it('does not send a question twice, nor one without a chapter ID', () => {
+    const first = addBatch(EMPTY_BANK, rows, 'A', at, id).bank;
+    const again = addBatch(first, rows, 'A', at, id);
+    expect([again.sent, again.already]).toEqual([0, 7]);
+    expect(again.bank).toBe(first);
+    const loose = addBatch(EMPTY_BANK, format('q1 | a1\nq2 | a2').rows, 'A', at, id);
+    expect([loose.sent, loose.noId]).toEqual([0, 2]);
+  });
+
+  it('approves, sends back with a reason, and moves back to waiting', () => {
+    const bank = addBatch(EMPTY_BANK, rows, 'A', at, id).bank;
+    const [a, b, c] = bank.questions.map((q) => q.id);
+    let next = setStatus(bank, [a, b], 'approved', 'ignored', at);
+    next = setStatus(next, [c], 'rejected', '  Answer should be Rusting  ', at);
+    expect(counts(next)).toEqual({ pending: 4, approved: 2, rejected: 1 });
+    expect(next.questions.find((q) => q.id === a)).toMatchObject({ status: 'approved', note: '', reviewedAt: at });
+    expect(next.questions.find((q) => q.id === c)).toMatchObject({ status: 'rejected', note: 'Answer should be Rusting' });
+    const back = setStatus(next, [c], 'pending', '', at);
+    expect(back.questions.find((q) => q.id === c)).toMatchObject({ status: 'pending', note: '', reviewedAt: null });
+    expect(bank.questions.every((q) => q.status === 'pending')).toBe(true); // the original is untouched (so undo works)
+  });
+
+  it('lets a question that was sent back be sent again', () => {
+    const bank = addBatch(EMPTY_BANK, rows, 'A', at, id).bank;
+    const sentBack = setStatus(bank, [bank.questions[0].id], 'rejected', 'fix it', at);
+    const again = addBatch(sentBack, rows, 'A', at, id);
+    expect([again.sent, again.already]).toEqual([1, 6]);
   });
 });

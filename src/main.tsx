@@ -8,9 +8,11 @@ import './styles.css';
 import { checkDetail, DETAIL_KEYS, detailLine, detailsId, LABEL, readDetails, standardDetail, writeDetail, type DetailKey } from './details';
 import { baseName, COLUMNS, EXAMPLE, format, missing, toCSV, toJSON, toTSV, visibleIssues } from './format';
 import { Guide } from './Guide';
-import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon, Editor, Logo, RowsTable } from './ui';
+import { addBatch, counts, newId, ReviewPage, useBank, type Bank } from './review';
+import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon, Editor, Logo, RowsTable, SendIcon, useUndo } from './ui';
 
 const KEY = 'question-formatter:v1';
+const NAME_KEY = 'question-formatter:name';
 const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: 'Science', chapter: '1: Chemical Reactions' };
 
 /** The draft is kept in this browser so a refresh never loses it. */
@@ -23,14 +25,65 @@ function load(): string {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const motion = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
+const stored = (key: string) => { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } };
 
+/** Scrolls smoothly to a part of the page and moves keyboard focus there, without adding "#..." to the address. */
+function scrollToEl(el: HTMLElement | null) {
+  if (!el) return;
+  el.scrollIntoView({ behavior: motion(), block: 'start' });
+  el.focus({ preventScroll: true });
+}
+
+type Page = 'format' | 'review';
+const pageOf = (): Page => (location.pathname.replace(/\/+$/, '') === '/review' ? 'review' : 'format');
+
+/** Two pages: the formatter at "/" and the HoD's Approve page at "/review", sharing one header and the question bank. */
 function App() {
+  const [page, setPage] = useState<Page>(pageOf);
+  const [bank, setBank] = useBank();
+  useEffect(() => {
+    const on = () => setPage(pageOf());
+    addEventListener('popstate', on);
+    return () => removeEventListener('popstate', on);
+  }, []);
+  const go = (p: Page) => {
+    if (p !== page) history.pushState(null, '', p === 'review' ? '/review' : '/');
+    setPage(p);
+    scrollTo({ top: 0, behavior: motion() });
+  };
+  const waiting = counts(bank).pending;
+  const sample = () => setBank((b) => addBatch(b, format(EXAMPLE).rows, 'Sample teacher', new Date().toISOString(), newId).bank);
+
+  return (
+    <>
+      <header className="top">
+        <div className="top-in">
+          <span className="brand"><Logo /><span className="brand-text">Question Formatter</span></span>
+          <nav className="nav" aria-label="Pages">
+            <button type="button" className={`nav-link${page === 'format' ? ' on' : ''}`} aria-current={page === 'format' ? 'page' : undefined} onClick={() => go('format')}>Format</button>
+            <button type="button" className={`nav-link${page === 'review' ? ' on' : ''}`} aria-current={page === 'review' ? 'page' : undefined} onClick={() => go('review')}>
+              Approve{waiting > 0 && <span className="badge pop" key={waiting}>{waiting}</span>}
+            </button>
+            {page === 'format' && <button type="button" className="top-link" onClick={() => scrollToEl(document.getElementById('guide'))}>How to write<span className="wide-only"> questions</span></button>}
+          </nav>
+        </div>
+      </header>
+      {page === 'format'
+        ? <Formatter bank={bank} setBank={setBank} toReview={() => go('review')} />
+        : <ReviewPage key="review" bank={bank} setBank={setBank} sample={sample} toFormatter={() => go('format')} save={download} />}
+    </>
+  );
+}
+
+function Formatter({ bank, setBank, toReview }: { bank: Bank; setBank: (b: Bank) => void; toReview: () => void }) {
   const [raw, setRaw] = useState(load);
   const [done, setDone] = useState('');
   const [caret, setCaret] = useState(0);
   /** Bumped when the whole text is replaced (paste, example, clear), so the table plays its entrance again. */
   const [batch, setBatch] = useState(0);
-  const [undo, setUndo] = useState<{ text: string; what: string } | null>(null);
+  const { offer, toast } = useUndo();
+  const [teacher, setTeacher] = useState(() => stored(NAME_KEY));
+  const [sent, setSent] = useState<{ sent: number; noId: number; already: number } | null>(null);
   const [resultsInView, setResultsInView] = useState(true);
   /** The line being typed on in the Questions box, and the detail box being typed in: problems there wait until they move on. */
   const [typingLine, setTypingLine] = useState<number | null>(null);
@@ -38,7 +91,6 @@ function App() {
   const boxTimer = useRef(0);
   const box = useRef<HTMLTextAreaElement>(null);
   const results = useRef<HTMLElement>(null);
-  const undoTimer = useRef(0);
 
   useEffect(() => {
     try { localStorage.setItem(KEY, JSON.stringify({ raw })); } catch { /* storage full or blocked */ }
@@ -98,30 +150,29 @@ function App() {
 
   /** Replacing all the text can always be undone for a few seconds, so there is no "are you sure?". */
   const replaceAll = (next: string, what: string) => {
-    if (raw.trim() && raw !== next) {
-      setUndo({ text: raw, what });
-      clearTimeout(undoTimer.current);
-      undoTimer.current = window.setTimeout(() => setUndo(null), 7000);
+    const before = raw;
+    if (before.trim() && before !== next) {
+      offer(what, () => {
+        setRaw(before);
+        setBatch((b) => b + 1);
+        box.current?.focus({ preventScroll: true });
+      });
     }
     setRaw(next);
     setBatch((b) => b + 1);
   };
-  const restore = () => {
-    if (!undo) return;
-    setRaw(undo.text);
-    setBatch((b) => b + 1);
-    setUndo(null);
-    box.current?.focus({ preventScroll: true });
+
+  /** Sends the questions to the HoD as one batch. */
+  const ready = rows.filter((r) => r.chapter_id).length;
+  const send = () => {
+    try { localStorage.setItem(NAME_KEY, teacher.trim()); } catch { /* not saved: fine */ }
+    const { bank: next, ...result } = addBatch(bank, rows, teacher, new Date().toISOString(), newId);
+    setBank(next);
+    setSent(result);
+    if (result.sent) flash('send');
   };
 
-  const prompt = `Open ${location.origin}${location.pathname} and follow the instructions on that page to turn the material below into questions and answers.\n\nMaterial (my notes, my questions, or just the board, class, subject and chapter):\n`;
-
-  /** Scrolls smoothly to a part of the page and moves keyboard focus there, without adding "#..." to the address. */
-  const scrollTo = (el: HTMLElement | null) => {
-    if (!el) return;
-    el.scrollIntoView({ behavior: motion(), block: 'start' });
-    el.focus({ preventScroll: true });
-  };
+  const prompt = `Open ${location.origin}/ and follow the instructions on that page to turn the material below into questions and answers.\n\nMaterial (my notes, my questions, or just the board, class, subject and chapter):\n`;
 
   /** Selects a line of the Questions box, so a reported problem can be fixed in place. */
   const goTo = (line: number) => {
@@ -138,12 +189,6 @@ function App() {
 
   return (
     <>
-      <header className="top">
-        <div className="top-in">
-          <span className="brand"><Logo /> Question Formatter</span>
-          <button type="button" className="top-link" onClick={() => scrollTo(document.getElementById('guide'))}>How to write<span className="wide-only"> questions</span></button>
-        </div>
-      </header>
       <main className="page">
         <div className="intro enter">
           <h1>Question Formatter</h1>
@@ -236,6 +281,25 @@ function App() {
             </div>
             <p className="sr-only" aria-live="polite">{done === 'csv' || done === 'json' ? 'Downloaded.' : done ? 'Copied.' : ''}</p>
             <p className="small muted">One row per question, with the columns <code>{COLUMNS.join(', ')}</code>. The CSV imports straight into a database table.</p>
+
+            <form className="send" onSubmit={(e) => { e.preventDefault(); send(); }}>
+              <h3>3. Send for approval</h3>
+              <p className="small muted">Your HoD checks the questions on the Approve page. Only approved ones go into the question bank and the games.</p>
+              <div className="row">
+                <input type="text" aria-label="Your name" placeholder="Your name" value={teacher} autoComplete="name" onChange={(e) => { setTeacher(e.target.value); setSent(null); }} />
+                <button type="submit" className={`btn dark${done === 'send' ? ' is-done' : ''}`} disabled={!ready || !teacher.trim()}>
+                  <ActionIcon done={done === 'send'}><SendIcon /></ActionIcon>{ready ? `Send ${plural(ready, 'question')}` : 'Send'}
+                </button>
+              </div>
+              {rows.length > ready && <p className="small muted">{plural(rows.length - ready, 'question has', 'questions have')} no chapter ID and can't be sent yet. Fill in the boxes above.</p>}
+              {sent && (
+                <p className={`sent-note ${sent.sent ? 'ok' : 'warn'}`} key={JSON.stringify(sent)}>
+                  {sent.sent ? <>Sent {plural(sent.sent, 'question')}. </> : 'Nothing new to send. '}
+                  {sent.already > 0 && <>{plural(sent.already, 'question was', 'questions were')} already sent, so {sent.already === 1 ? 'it was' : 'they were'} skipped. </>}
+                  {sent.sent > 0 && <button type="button" className="linkish" onClick={toReview}>See them on the Approve page</button>}
+                </p>
+              )}
+            </form>
           </section>
         </div>
 
@@ -243,16 +307,11 @@ function App() {
       </main>
 
       <div className="floating" aria-live="polite">
-        {undo ? (
-          <div className="toast" key="undo">
-            <span>{undo.what}.</span>
-            <button type="button" className="toast-btn" onClick={restore}>Undo</button>
-          </div>
-        ) : rows.length > 0 && !resultsInView ? (
-          <button type="button" className={`jump${errors ? ' has-error' : ''}`} key="jump" onClick={() => scrollTo(results.current)}>
+        {toast || (rows.length > 0 && !resultsInView ? (
+          <button type="button" className={`jump${errors ? ' has-error' : ''}`} key="jump" onClick={() => scrollToEl(results.current)}>
             {errors ? `${plural(errors, 'line')} left out · ` : ''}{plural(rows.length, 'question')} <ArrowDownIcon />
           </button>
-        ) : null}
+        ) : null)}
       </div>
     </>
   );
