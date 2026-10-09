@@ -1,20 +1,18 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
-import type { Level } from '../lib/details';
-import type { Issue } from '../lib/format';
+import { lineLevels, type Issue } from '../lib/format';
 
 /**
  * The Questions box. A textarea can't style parts of its text, so a copy of the text sits behind it with the same font,
  * padding and width: the copy is invisible except for the underlines on lines with a problem. The two scroll together.
  * Moving the cursor onto an underlined line shows why it is underlined.
  */
-export function Editor({ value, onChange, onPaste, onTyping, issues, levels, boxRef, caret, setCaret }: {
+export function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret }: {
   value: string;
   onChange: (v: string) => void;
   onPaste: () => void;
   /** The line just typed on (null when the box is left): problems there wait until the cursor moves on. */
   onTyping: (line: number | null) => void;
   issues: Issue[];
-  levels: Map<number, Level>;
   boxRef: RefObject<HTMLTextAreaElement | null>;
   /** The line the cursor is on (set from outside too, when a listed problem is clicked). */
   caret: number;
@@ -42,6 +40,7 @@ export function Editor({ value, onChange, onPaste, onTyping, issues, levels, box
 
   const lineOf = (ta: HTMLTextAreaElement) => ta.value.slice(0, ta.selectionStart).split('\n').length;
   const onCaret = (ta: HTMLTextAreaElement) => setCaret(lineOf(ta));
+  const levels = lineLevels(issues);
   const here = issues.filter((x) => x.line === caret);
   const errors = issues.filter((x) => x.level === 'error').length;
 

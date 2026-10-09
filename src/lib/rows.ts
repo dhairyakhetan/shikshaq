@@ -9,22 +9,22 @@ export function toRecord(r: Row): Record_ {
   return out;
 }
 
-const cell = (v: string | number | null) => (v === null ? '' : String(v));
+/** A header row, then one line per question. */
+function table(rows: Row[], sep: string, cell: (v: string) => string): string {
+  const line = (r: Row) => {
+    const rec = toRecord(r);
+    return COLUMNS.map((c) => cell(String(rec[c] ?? ''))).join(sep);
+  };
+  return [COLUMNS.join(sep), ...rows.map(line)].join('\n');
+}
 
 /** CSV with a header row (RFC 4180 quoting, no byte-order mark), ready to import into a table. */
-export function toCSV(rows: Row[]): string {
-  const q = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  return [COLUMNS.join(','), ...rows.map((r) => COLUMNS.map((c) => q(cell(toRecord(r)[c]))).join(','))].join('\n') + '\n';
-}
+export const toCSV = (rows: Row[]) => table(rows, ',', (v) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)) + '\n';
 
-export function toJSON(rows: Row[]): string {
-  return JSON.stringify(rows.map(toRecord), null, 2) + '\n';
-}
+export const toJSON = (rows: Row[]) => JSON.stringify(rows.map(toRecord), null, 2) + '\n';
 
 /** Tab-separated with a header row, for pasting into Google Sheets or Excel. */
-export function toTSV(rows: Row[]): string {
-  return [COLUMNS.join('\t'), ...rows.map((r) => COLUMNS.map((c) => cell(toRecord(r)[c]).replace(/\t/g, ' ')).join('\t'))].join('\n');
-}
+export const toTSV = (rows: Row[]) => table(rows, '\t', (v) => v.replace(/\t/g, ' '));
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 

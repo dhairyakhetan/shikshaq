@@ -13,10 +13,10 @@
  * Every problem is reported with its line number: an error means the line was left out, a warning means "check this".
  */
 import {
-  boardClassProblem, chapterId, checkBoard, checkClass, checkNumbered, checkSubject, parseNumbered, plainLine, readMeta, topicId,
-  type Level, type MetaKey,
+  boardClassProblem, chapterId, checkBoard, checkClass, checkNumbered, checkSubject, MAX_NO, plainLine, readMeta, topicId,
+  type Level, type MetaKey, type Problem,
 } from './details';
-import { tidy, titleCase } from './text';
+import { tidy } from './text';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
@@ -48,7 +48,6 @@ export interface Row {
 }
 
 export interface Issue { line: number; level: Level; text: string }
-export interface Formatted { rows: Row[]; issues: Issue[] }
 
 interface Context {
   board: string; boardCode: string | null;
@@ -70,7 +69,7 @@ const DIFF: Record<string, Difficulty> = {
 };
 
 /** '' → null, a known word → the difficulty, anything else → undefined. */
-export function toDifficulty(s: string): Difficulty | null | undefined {
+function toDifficulty(s: string): Difficulty | null | undefined {
   const t = tidy(s).toLowerCase();
   return t ? DIFF[t] : null;
 }
@@ -93,7 +92,6 @@ const NUMBER = /^(?:\(\d{1,3}\)|\[\d{1,3}\]|\d{1,3}[.):\]]|\d{1,3}\s+[-–])\s+/
 const QPREFIX = /^q(?:ues(?:tion)?)?\s*(?:\.?\s*\d{1,3}\s*[.):\-–]?|[.):\-–])\s*/i;
 const APREFIX = /^(?:ans(?:wer)?\s*(?:\.?\s*\d{1,3}\s*[.):\-–]?|[.):\-–])\s*|a\s*[.):\-–]\s+)/i;
 const INLINE_ANS = /^(.*?\S)\s+(?:ans(?:wer)?\s*(?:[.):\-–—]\s*)|→|->|=>)\s*(.+)$/i;
-const NAMES: Record<MetaKey, string> = { board: 'Board', class: 'Class', subject: 'Subject', chapter: 'Chapter', topic: 'Topic', difficulty: 'Difficulty' };
 
 /** Removes bullets, numbering and a "Q." label. */
 function stripLead(s: string): { body: string; hadQ: boolean } {
@@ -151,7 +149,7 @@ const DEFAULT_FIELDS: Field[] = ['question', 'answer', 'difficulty'];
 export const NO_ANSWER = 'This question has no answer.';
 const CANNOT_READ = 'Couldn\'t find a question and an answer. Put " | " between them.';
 
-export function format(raw: string): Formatted {
+export function format(raw: string): { rows: Row[]; issues: Issue[] } {
   const rows: Row[] = [];
   const issues: Issue[] = [];
   const ctx: Context = {
@@ -180,29 +178,25 @@ export function format(raw: string): Formatted {
   };
 
   /**
-   * Checks a board, class, subject, chapter or topic and returns what to store. A detail line reports its own problem;
-   * a table column reports each distinct wrong value once (the key), not on every row.
+   * Checks a detail and returns what it changes. A detail line reports its own problem; a table column reports each
+   * distinct wrong value once (keyed by the value), not on every row.
    */
-  const board = (v: string, line: number, key = String(line)) => {
-    const b = checkBoard(v);
-    if (b.problem) warnOnce(`board\u0000${key}`, line, b.problem.text, b.problem.level);
-    return { board: b.name, boardCode: b.code };
-  };
-  const klass = (v: string, line: number, key = String(line)) => {
-    const c = checkClass(v);
-    if (c.problem) warnOnce(`class\u0000${key}`, line, c.problem.text, c.problem.level);
-    return c.value;
-  };
-  const subject = (v: string, line: number, key = String(line)) => {
-    const s = checkSubject(v);
-    if (s.problem) warnOnce(`subject\u0000${key}`, line, s.problem.text, s.problem.level);
-    return { subject: s.name, subjectCode: s.code };
-  };
-  const numbered = (kind: 'chapter' | 'topic', v: string, line: number, key = String(line)) => {
-    const p = parseNumbered(v, kind);
-    const problem = checkNumbered(kind, p.no, p.name);
-    if (problem) warnOnce(`${kind}\u0000${key}`, line, problem.text, problem.level);
-    return { no: problem?.level === 'error' && p.no !== null && (p.no < 1 || p.no > 99) ? null : p.no, name: titleCase(p.name) };
+  const detail = (key: MetaKey, v: string, line: number, onceKey: string | number = line): Partial<Context> => {
+    const say = (p?: Problem) => p && warnOnce(`${key}\u0000${onceKey}`, line, p.text, p.level);
+    if (key === 'board') { const b = checkBoard(v); say(b.problem); return { board: b.name, boardCode: b.code, boardLine: line }; }
+    if (key === 'class') { const c = checkClass(v); say(c.problem); return { class: c.value }; }
+    if (key === 'subject') { const s = checkSubject(v); say(s.problem); return { subject: s.name, subjectCode: s.code }; }
+    if (key === 'difficulty') {
+      const d = toDifficulty(v);
+      if (d !== undefined) return { difficulty: d };
+      say({ level: 'warn', text: `"${tidy(v)}" is not easy, medium or hard, so no difficulty was set.` });
+      return {};
+    }
+    const c = checkNumbered(v, key);
+    say(c.problem);
+    return key === 'chapter'
+      ? { chapter_no: c.no, chapter: c.name, chapterLine: line, topic_no: null, topic: '', topicLine: 0 } // a new chapter starts with no topic
+      : { topic_no: c.no, topic: c.name, topicLine: line };
   };
 
   const add = (line: number, q0: string, a0: string, over: Partial<Context> = {}) => {
@@ -250,62 +244,40 @@ export function format(raw: string): Formatted {
     });
   };
 
+  const ORDER: MetaKey[] = ['board', 'class', 'subject', 'chapter', 'topic', 'difficulty'];
   const fromCells = (line: number, cells: string[], fields: Field[]) => {
-    const extra = cells.slice(fields.length).filter((c) => c.trim());
-    if (extra.length) return issue(line, 'error', 'This line has more parts than expected. Add a header row such as "Topic | Question | Answer".');
+    if (cells.slice(fields.length).some((c) => c.trim())) return issue(line, 'error', 'This line has more parts than expected. Add a header row such as "Topic | Question | Answer".');
+    const v: Partial<Record<Field, string>> = {};
+    fields.forEach((f, i) => { if (f !== 'skip' && cells[i]?.trim()) v[f] = cells[i]; });
     const over: Partial<Context> = {};
-    let q = '';
-    let a = '';
-    fields.forEach((f, i) => {
-      const v = cells[i] ?? '';
-      if (!v.trim() || f === 'skip') return;
-      if (f === 'question') q = v;
-      else if (f === 'answer') a = v;
-      else if (f === 'difficulty') {
-        const d = toDifficulty(v);
-        if (d === undefined) issue(line, 'warn', `"${tidy(v)}" is not easy, medium or hard, so no difficulty was set.`);
-        else over.difficulty = d;
-      } else if (f === 'board') Object.assign(over, board(v, line, v), { boardLine: line });
-      else if (f === 'class') over.class = klass(v, line, v);
-      else if (f === 'subject') Object.assign(over, subject(v, line, v));
-      else if (f === 'chapter' || f === 'topic') {
-        const p = numbered(f, v, line, v);
-        if (f === 'chapter') { over.chapter = p.name; over.chapterLine = line; if (p.no !== null) over.chapter_no = p.no; }
-        else { over.topic = p.name; over.topic_no = p.no; over.topicLine = line; }
-      } else {
-        const no = parseInt(v, 10);
-        if (Number.isFinite(no) && no >= 1 && no <= 99) over[f] = no;
-        else warnOnce(`${f}\u0000${v}`, line, `"${tidy(v)}" is not a ${f === 'chapter_no' ? 'chapter' : 'topic'} number from 1 to 99.`);
-      }
-    });
-    if (('chapter' in over || 'chapter_no' in over) && !('topic' in over) && !('topic_no' in over)) { over.topic = ''; over.topic_no = null; }
-    if ('topic' in over && !('topic_no' in over)) over.topic_no = null;
-    add(line, q, a, over);
+    // in a fixed order, so a chapter column clears the topic before a topic column sets it
+    for (const k of ORDER) if (v[k] !== undefined) Object.assign(over, detail(k, v[k], line, k === 'difficulty' ? line : v[k]));
+    for (const k of ['chapter_no', 'topic_no'] as const) {
+      if (v[k] === undefined) continue;
+      const no = parseInt(v[k], 10);
+      if (no >= 1 && no <= MAX_NO) over[k] = no;
+      else warnOnce(`${k}\u0000${v[k]}`, line, `"${tidy(v[k])}" is not a ${k === 'chapter_no' ? 'chapter' : 'topic'} number from 1 to ${MAX_NO}.`);
+    }
+    if (v.chapter_no !== undefined && v.topic === undefined && v.topic_no === undefined) Object.assign(over, { topic: '', topic_no: null });
+    add(line, v.question ?? '', v.answer ?? '', over);
   };
 
   const setMeta = (key: MetaKey, value: string, line: number) => {
     const prev = lastSet[key];
     if (prev && !prev.used) {
-      issue(prev.line, 'warn', key === 'topic' ? 'No questions under this topic.' : `Not used: ${NAMES[key]} is set again on line ${line} before any question.`);
+      issue(prev.line, 'warn', key === 'topic' ? 'No questions under this topic.' : `Not used: ${key[0].toUpperCase()}${key.slice(1)} is set again on line ${line} before any question.`);
     }
     if (key === 'chapter' && lastSet.topic && !lastSet.topic.used) issue(lastSet.topic.line, 'warn', 'No questions under this topic.');
     lastSet[key] = { line, used: false };
     if (key === 'chapter') delete lastSet.topic;
+    Object.assign(ctx, detail(key, value, line));
+  };
 
-    if (key === 'board') Object.assign(ctx, board(value, line), { boardLine: line });
-    else if (key === 'class') ctx.class = klass(value, line);
-    else if (key === 'subject') Object.assign(ctx, subject(value, line));
-    else if (key === 'chapter') {
-      const p = numbered('chapter', value, line);
-      Object.assign(ctx, { chapter_no: p.no, chapter: p.name, topic_no: null, topic: '', chapterLine: line, topicLine: 0 });
-    } else if (key === 'topic') {
-      const p = numbered('topic', value, line);
-      Object.assign(ctx, { topic_no: p.no, topic: p.name, topicLine: line });
-    } else {
-      const d = toDifficulty(value);
-      if (d === undefined) issue(line, 'warn', `"${tidy(value)}" is not easy, medium or hard.`);
-      else ctx.difficulty = d;
-    }
+  /** The line after a question on its own: it is the answer. */
+  const answerPending = (a: string) => {
+    const p = pending!;
+    pending = null;
+    add(p.line, p.q, a);
   };
 
   raw.split(/\r?\n/).forEach((text, i) => {
@@ -355,13 +327,7 @@ export function format(raw: string): Formatted {
 
     const { body, hadQ } = stripLead(t);
     if (APREFIX.test(body) && !hadQ) {
-      const a = body.replace(APREFIX, '');
-      if (pending) {
-        const p: { q: string; line: number } = pending;
-        pending = null;
-        return add(p.line, p.q, a);
-      }
-      return issue(line, 'error', 'This answer has no question above it.');
+      return pending ? answerPending(body.replace(APREFIX, '')) : issue(line, 'error', 'This answer has no question above it.');
     }
 
     const pair = splitLoose(body);
@@ -374,11 +340,7 @@ export function format(raw: string): Formatted {
       pending = { q: body, line };
       return;
     }
-    if (pending) {
-      const p: { q: string; line: number } = pending;
-      pending = null;
-      return add(p.line, p.q, body);
-    }
+    if (pending) return answerPending(body);
     issue(line, 'error', CANNOT_READ);
   });
   dropPending();

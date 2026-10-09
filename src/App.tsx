@@ -4,32 +4,19 @@ import { Guide } from './components/Guide';
 import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon } from './components/icons';
 import { RowsTable } from './components/RowsTable';
 import { EXAMPLE } from './example';
-import { checkDetail, DETAIL_KEYS, detailLine, detailsId, readDetails, standardDetail, writeDetail, type DetailKey } from './lib/details';
-import { COLUMNS, format, lineLevels, missing, visibleIssues } from './lib/format';
+import { checkDetail, DETAIL_KEYS, detailLine, detailsId, LABEL, readDetails, standardDetail, writeDetail, type DetailKey } from './lib/details';
+import { COLUMNS, format, missing, visibleIssues } from './lib/format';
 import { baseName, copyText, download, toCSV, toJSON, toTSV } from './lib/rows';
 
 const KEY = 'question-formatter:v1';
-const FIELDS: Record<DetailKey, { label: string; hint: string }> = {
-  board: { label: 'Board', hint: 'CBSE' },
-  class: { label: 'Class', hint: '10' },
-  subject: { label: 'Subject', hint: 'Science' },
-  chapter: { label: 'Chapter', hint: '1: Chemical Reactions' },
-};
+const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: 'Science', chapter: '1: Chemical Reactions' };
 
-/** The draft is kept in this browser so a refresh never loses it. Drafts from before the boxes lived in the text are moved into it. */
+/** The draft is kept in this browser so a refresh never loses it. */
 function load(): string {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (v && typeof v.raw === 'string') {
-      let raw: string = v.raw;
-      for (const k of [...DETAIL_KEYS].reverse()) {
-        const old = v.details?.[k];
-        if (typeof old === 'string' && old.trim() && !readDetails(raw)[k]) raw = writeDetail(raw, k, old);
-      }
-      return raw;
-    }
-  } catch { /* private window or unreadable draft: start empty */ }
-  return '';
+    return typeof v?.raw === 'string' ? v.raw : '';
+  } catch { return ''; /* private window or unreadable draft */ }
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -76,7 +63,6 @@ export function App() {
     if (line !== null) setCaret(line);
     setTypingLine(line);
   };
-  const levels = lineLevels(issues);
   const details = readDetails(raw);
   const id = detailsId(details);
   const gaps = missing(rows);
@@ -170,8 +156,8 @@ export function App() {
                 const problem = typingBox === k ? undefined : checkDetail(k, details[k]);
                 return (
                   <div className="field" key={k}>
-                    <label htmlFor={`d-${k}`}>{FIELDS[k].label}</label>
-                    <input id={`d-${k}`} type="text" value={details[k]} placeholder={`e.g. ${FIELDS[k].hint}`} autoComplete="off"
+                    <label htmlFor={`d-${k}`}>{LABEL[k]}</label>
+                    <input id={`d-${k}`} type="text" value={details[k]} placeholder={`e.g. ${HINT[k]}`} autoComplete="off"
                       className={problem ? problem.level : undefined} aria-invalid={problem?.level === 'error'} aria-describedby={problem ? `d-${k}-msg` : undefined}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -198,7 +184,7 @@ export function App() {
             </p>
 
             <label htmlFor="q">Questions</label>
-            <Editor value={raw} onChange={setRaw} onPaste={() => setBatch((b) => b + 1)} onTyping={typedOn} issues={issues} levels={levels} boxRef={box} caret={caret} setCaret={moveCaret} />
+            <Editor value={raw} onChange={setRaw} onPaste={() => setBatch((b) => b + 1)} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} />
             <div className="row">
               <button type="button" className="btn quiet" onClick={() => replaceAll(EXAMPLE, 'Example loaded')}>Try an example</button>
               <button type="button" className="btn quiet" onClick={() => replaceAll('', 'Cleared')} disabled={!raw}>Clear</button>

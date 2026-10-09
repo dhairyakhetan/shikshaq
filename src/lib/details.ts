@@ -95,7 +95,7 @@ export function checkBoard(raw: string): { name: string; code: string | null; pr
 const ROMAN: Record<string, number> = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12 };
 
 /** "10", "10th", "Class 10", "X", "Std. 8", "Grade 7" → the text after the label, with "th" dropped from a number. */
-export function normClass(s: string): string {
+function normClass(s: string): string {
   return tidy(s).replace(/^(?:class|grade|std\.?|standard)\s*[:\-–]?\s*/i, '').replace(/^(\d+)\s*(?:st|nd|rd|th)$/i, '$1');
 }
 
@@ -184,19 +184,17 @@ export function parseNumbered(s: string, kind: 'chapter' | 'topic'): { no: numbe
   return { no: kind === 'chapter' ? parts[0] : parts[parts.length - 1], name: tidy(m[2]) };
 }
 
-export function checkNumbered(kind: 'chapter' | 'topic', no: number | null, name: string): Problem | undefined {
+/** A chapter or topic: its number (null when missing or out of range), its name capitalised, and any problem. */
+export function checkNumbered(value: string, kind: 'chapter' | 'topic'): { no: number | null; name: string; problem?: Problem } {
+  const { no, name } = parseNumbered(value, kind);
   const Kind = kind === 'chapter' ? 'Chapter' : 'Topic';
-  if (no !== null && (no < 1 || no > MAX_NO)) return { level: 'error', text: `${Kind} number must be from 1 to ${MAX_NO}.` };
-  if (name.length > MAX_NAME) return { level: 'error', text: `${Kind} name is longer than ${MAX_NAME} characters.` };
-  if (kind === 'chapter' && no === null) return { level: 'warn', text: 'Add the chapter number, for example "3: Acids". It is part of the chapter ID.' };
-  if (!name) return { level: 'warn', text: `Add the ${kind} name.` };
-  return undefined;
-}
-
-/** A chapter or topic written the same way every time: "3: Acids, Bases and Salts". */
-export function numberedValue(no: number | null, name: string): string {
-  const n = titleCase(name);
-  return no === null ? n : n ? `${no}: ${n}` : String(no);
+  const inRange = no !== null && no >= 1 && no <= MAX_NO;
+  const problem: Problem | undefined = no !== null && !inRange ? { level: 'error', text: `${Kind} number must be from 1 to ${MAX_NO}.` }
+    : name.length > MAX_NAME ? { level: 'error', text: `${Kind} name is longer than ${MAX_NAME} characters.` }
+    : kind === 'chapter' && no === null ? { level: 'warn', text: 'Add the chapter number, for example "3: Acids". It is part of the chapter ID.' }
+    : !name ? { level: 'warn', text: `Add the ${kind} name.` }
+    : undefined;
+  return { no: inRange ? no : null, name: titleCase(name), problem };
 }
 
 // ---------------------------------------------------------------- IDs
@@ -219,7 +217,6 @@ export function boardClassProblem(boardCode: string | null, cls: number | null):
 // ---------------------------------------------------------------- detail lines
 
 export type MetaKey = 'board' | 'class' | 'subject' | 'chapter' | 'topic' | 'difficulty';
-export interface Meta { key: MetaKey; value: string }
 
 const META = /^(board|class|grade|std|standard|subject|chapter|ch|lesson|topic|sub-?topic|section|difficulty|level)\b\.?\s*(.*)$/i;
 const KEY_OF: Record<string, MetaKey> = {
@@ -237,7 +234,7 @@ export const plainLine = (line: string) => tidy(unmark(line));
  * The value is the text after the label (and after ":" or "-"), as written.
  * A sentence that only starts with one of the words ("Class of compounds that ...") is not a detail line.
  */
-export function readMeta(line: string): Meta | null {
+export function readMeta(line: string): { key: MetaKey; value: string } | null {
   if (/[|\t]/.test(line)) return null;
   const m = unmark(line).match(META);
   if (!m) return null;
@@ -262,83 +259,65 @@ export function readMeta(line: string): Meta | null {
 
 export type DetailKey = 'board' | 'class' | 'subject' | 'chapter';
 export const DETAIL_KEYS: DetailKey[] = ['board', 'class', 'subject', 'chapter'];
-const LABEL: Record<DetailKey, string> = { board: 'Board', class: 'Class', subject: 'Subject', chapter: 'Chapter' };
+export const LABEL: Record<DetailKey, string> = { board: 'Board', class: 'Class', subject: 'Subject', chapter: 'Chapter' };
 
 const detailOf = (line: string) => {
   const m = readMeta(line);
-  return m && (DETAIL_KEYS as string[]).includes(m.key) ? (m as { key: DetailKey; value: string }) : null;
+  return m && m.key in LABEL ? (m as { key: DetailKey; value: string }) : null;
 };
 
-/** The detail lines at the top of the text, before the first topic or question. */
-function header(lines: string[]): number {
-  const i = lines.findIndex((l) => l.trim() && !detailOf(l));
-  return i < 0 ? lines.length : i;
+/** Where a box's line is: among the detail lines at the top of the text, before the first topic or question. -1 if none. */
+function find(lines: string[], k: DetailKey): number {
+  const end = lines.findIndex((l) => l.trim() && !detailOf(l));
+  return lines.findIndex((l, i) => (end < 0 || i < end) && detailOf(l)?.key === k);
 }
 
-/** What the four boxes show: the matching lines at the top of the text. */
+/** What the four boxes show: their lines at the top of the text. */
 export function readDetails(text: string): Record<DetailKey, string> {
   const lines = text.split('\n');
-  const out: Record<DetailKey, string> = { board: '', class: '', subject: '', chapter: '' };
-  const seen = new Set<DetailKey>();
-  for (const l of lines.slice(0, header(lines))) {
-    const d = detailOf(l);
-    if (d && !seen.has(d.key)) { seen.add(d.key); out[d.key] = d.value; }
-  }
-  return out;
+  const get = (k: DetailKey) => {
+    const i = find(lines, k);
+    return i < 0 ? '' : detailOf(lines[i])!.value;
+  };
+  return { board: get('board'), class: get('class'), subject: get('subject'), chapter: get('chapter') };
 }
 
 /** The line (from 1) a box writes to, or null when it has none yet. */
 export function detailLine(text: string, k: DetailKey): number | null {
-  const lines = text.split('\n');
-  const end = header(lines);
-  const i = lines.findIndex((l, n) => n < end && detailOf(l)?.key === k);
+  const i = find(text.split('\n'), k);
   return i < 0 ? null : i + 1;
 }
-
-const lineFor = (k: DetailKey, v: string) => (k === 'chapter' && /^\d/.test(v) ? `Chapter ${v}` : `${LABEL[k]}: ${v}`);
 
 /** Typing in a box writes its line at the top of the text (in the order Board, Class, Subject, Chapter); emptying it removes the line. */
 export function writeDetail(text: string, k: DetailKey, value: string): string {
   const v = value.replace(/\s*[|\t\r\n]+\s*/g, ' ');
   const lines = text.split('\n');
-  const end = header(lines);
-  const at = lines.findIndex((l, i) => i < end && detailOf(l)?.key === k);
-  if (at >= 0) {
-    if (v.trim()) lines[at] = lineFor(k, v);
-    else lines.splice(at, 1);
-  } else if (v.trim()) {
-    let pos = 0;
-    lines.slice(0, end).forEach((l, i) => {
-      const d = detailOf(l);
-      if (d && DETAIL_KEYS.indexOf(d.key) < DETAIL_KEYS.indexOf(k)) pos = i + 1;
-    });
-    lines.splice(pos, 0, lineFor(k, v));
-  }
+  const at = find(lines, k);
+  const line = k === 'chapter' && /^\d/.test(v) ? `Chapter ${v}` : `${LABEL[k]}: ${v}`;
+  if (at >= 0) lines.splice(at, 1, ...(v.trim() ? [line] : []));
+  else if (v.trim()) lines.splice(Math.max(-1, ...DETAIL_KEYS.slice(0, DETAIL_KEYS.indexOf(k)).map((b) => find(lines, b))) + 1, 0, line);
   return lines.join('\n');
 }
 
-/** A box's problem, shown under it as soon as it is typed. */
-export function checkDetail(k: DetailKey, value: string): Problem | undefined {
-  if (!value.trim()) return undefined;
-  if (k === 'board') return checkBoard(value).problem;
-  if (k === 'class') return checkClass(value).problem;
-  if (k === 'subject') return checkSubject(value).problem;
-  const c = parseNumbered(value, 'chapter');
-  return checkNumbered('chapter', c.no, c.name);
-}
+const CHECK: Record<DetailKey, (v: string) => { problem?: Problem }> = {
+  board: checkBoard, class: checkClass, subject: checkSubject, chapter: (v) => checkNumbered(v, 'chapter'),
+};
+
+/** A box's problem, shown under it. */
+export const checkDetail = (k: DetailKey, value: string): Problem | undefined => (value.trim() ? CHECK[k](value).problem : undefined);
 
 /** A box's value written the standard way (CBSE, 11, Chemistry, "1: Some Basic Concepts"), or as it was if it can't be read. */
 export function standardDetail(k: DetailKey, value: string): string {
   if (!value.trim()) return '';
-  if (k === 'board') { const b = checkBoard(value); return b.code && b.problem?.level !== 'error' ? b.name : value; }
-  if (k === 'class') { const c = checkClass(value); return c.value ? String(c.value) : value; }
+  if (k === 'board') { const b = checkBoard(value); return b.code ? b.name : value; }
+  if (k === 'class') return String(checkClass(value).value ?? value);
   if (k === 'subject') return checkSubject(value).name || value;
-  const c = parseNumbered(value, 'chapter');
-  return c.no !== null && (c.no < 1 || c.no > MAX_NO) ? value : numberedValue(c.no, c.name);
+  const c = checkNumbered(value, 'chapter');
+  if (c.problem?.level === 'error') return value;
+  return c.no === null ? c.name : c.name ? `${c.no}: ${c.name}` : String(c.no);
 }
 
 /** The chapter ID the four boxes make, if they are all there. */
 export function detailsId(d: Record<DetailKey, string>): string | null {
-  const c = parseNumbered(d.chapter, 'chapter');
-  return chapterId(checkBoard(d.board).code, checkClass(d.class).value, checkSubject(d.subject).code, c.no !== null && c.no <= MAX_NO ? c.no : null);
+  return chapterId(checkBoard(d.board).code, checkClass(d.class).value, checkSubject(d.subject).code, checkNumbered(d.chapter, 'chapter').no);
 }
