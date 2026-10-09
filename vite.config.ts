@@ -17,7 +17,18 @@ function bakeInstructions(): Plugin {
   };
 }
 
+/** Three separate pages, one per part: the question formatter, the HoD desk and the revision games. */
 export default defineConfig({
+  appType: 'mpa',
+  build: {
+    rollupOptions: {
+      input: {
+        formatter: fileURLToPath(new URL('./index.html', import.meta.url)),
+        hod: fileURLToPath(new URL('./hod/index.html', import.meta.url)),
+        play: fileURLToPath(new URL('./play/index.html', import.meta.url)),
+      },
+    },
+  },
   plugins: [react(), bakeInstructions()],
   test: { include: ['tests/**/*.test.ts'] },
 });

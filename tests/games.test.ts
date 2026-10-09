@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { enumeration, gridWord, rng, sameAnswer, type Item } from '../src/games/shared';
 import { checkCrossword, makeCrossword, type Crossword } from '../src/games/crossword';
 import { checkFill, type FillIn } from '../src/games/fill';
+import { SAMPLE } from '../src/db';
 import { checkGame, makeGame, makePuzzle, seedOf } from '../src/games';
 import { checkMatching, makeMatching, type Matching } from '../src/games/matching';
 import { checkWordSearch, makeWordSearch, occurrences, type WordSearch } from '../src/games/wordsearch';
@@ -122,6 +123,15 @@ describe('making games from real questions', () => {
     expect(makePuzzle(items([['Only one?', 'Yes']]), 1)?.type).toBe('fill');
     expect(makePuzzle([], 1)).toBeNull();
     expect(makePuzzle(CHEM, 1, ['wordsearch', 'crossword'])?.type).toBe('wordsearch');
+  });
+});
+
+describe('the sample questions (what the Revise page shows first)', () => {
+  it('make every game, for the whole chapter and for each topic that has enough answers', () => {
+    const all = SAMPLE.map((r, i) => ({ id: `s${i}`, question: r.question, answer: r.answer }));
+    for (const type of ['crossword', 'wordsearch', 'matching', 'fill'] as const) expect(makeGame(type, all, 1), type).not.toBeNull();
+    const topic3 = all.filter((_, i) => SAMPLE[i].topic_no === 3);
+    expect(makePuzzle(topic3, 1)).not.toBeNull();
   });
 });
 

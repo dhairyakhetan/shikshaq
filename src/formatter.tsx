@@ -1,4 +1,5 @@
-import { StrictMode, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+/** The question formatter: teachers paste questions in any format, check them, and send them for approval or download them. */
+import { Fragment, StrictMode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@fontsource/atkinson-hyperlegible/latin-400.css';
 import '@fontsource/atkinson-hyperlegible/latin-700.css';
@@ -6,10 +7,10 @@ import '@fontsource/atkinson-hyperlegible-mono/latin-400.css';
 import '@fontsource-variable/bricolage-grotesque/index.css';
 import './styles.css';
 import { checkDetail, DETAIL_KEYS, detailLine, detailsId, LABEL, readDetails, standardDetail, writeDetail, type DetailKey } from './details';
-import { baseName, COLUMNS, EXAMPLE, format, missing, toCSV, toJSON, toTSV, visibleIssues } from './format';
+import { addBatch, COLUMNS, counts, newId, toCSV, toJSON, toTSV, useBank } from './db';
+import { baseName, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from './format';
 import { Guide } from './Guide';
-import { addBatch, counts, newId, ReviewPage, useBank, type Bank } from './review';
-import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon, Editor, Logo, RowsTable, SendIcon, useUndo } from './ui';
+import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon, RowsTable, SectionHeader, SendIcon, useUndo } from './ui';
 
 const KEY = 'question-formatter:v1';
 const NAME_KEY = 'question-formatter:name';
@@ -34,48 +35,8 @@ function scrollToEl(el: HTMLElement | null) {
   el.focus({ preventScroll: true });
 }
 
-type Page = 'format' | 'review';
-const pageOf = (): Page => (location.pathname.replace(/\/+$/, '') === '/review' ? 'review' : 'format');
-
-/** Two pages: the formatter at "/" and the HoD's Approve page at "/review", sharing one header and the question bank. */
-function App() {
-  const [page, setPage] = useState<Page>(pageOf);
+function Formatter() {
   const [bank, setBank] = useBank();
-  useEffect(() => {
-    const on = () => setPage(pageOf());
-    addEventListener('popstate', on);
-    return () => removeEventListener('popstate', on);
-  }, []);
-  const go = (p: Page) => {
-    if (p !== page) history.pushState(null, '', p === 'review' ? '/review' : '/');
-    setPage(p);
-    scrollTo({ top: 0, behavior: motion() });
-  };
-  const waiting = counts(bank).pending;
-  const sample = () => setBank((b) => addBatch(b, format(EXAMPLE).rows, 'Sample teacher', new Date().toISOString(), newId).bank);
-
-  return (
-    <>
-      <header className="top">
-        <div className="top-in">
-          <span className="brand"><Logo /><span className="brand-text">Question Formatter</span></span>
-          <nav className="nav" aria-label="Pages">
-            <button type="button" className={`nav-link${page === 'format' ? ' on' : ''}`} aria-current={page === 'format' ? 'page' : undefined} onClick={() => go('format')}>Format</button>
-            <button type="button" className={`nav-link${page === 'review' ? ' on' : ''}`} aria-current={page === 'review' ? 'page' : undefined} onClick={() => go('review')}>
-              Approve{waiting > 0 && <span className="badge pop" key={waiting}>{waiting}</span>}
-            </button>
-            {page === 'format' && <button type="button" className="top-link" onClick={() => scrollToEl(document.getElementById('guide'))}>How to write<span className="wide-only"> questions</span></button>}
-          </nav>
-        </div>
-      </header>
-      {page === 'format'
-        ? <Formatter bank={bank} setBank={setBank} toReview={() => go('review')} />
-        : <ReviewPage key="review" bank={bank} setBank={setBank} sample={sample} toFormatter={() => go('format')} save={download} />}
-    </>
-  );
-}
-
-function Formatter({ bank, setBank, toReview }: { bank: Bank; setBank: (b: Bank) => void; toReview: () => void }) {
   const [raw, setRaw] = useState(load);
   const [done, setDone] = useState('');
   const [caret, setCaret] = useState(0);
@@ -189,6 +150,9 @@ function Formatter({ bank, setBank, toReview }: { bank: Bank; setBank: (b: Bank)
 
   return (
     <>
+      <SectionHeader here="formatter" waiting={counts(bank).pending}>
+        <button type="button" className="top-link" onClick={() => scrollToEl(document.getElementById('guide'))}>How to write<span className="wide-only"> questions</span></button>
+      </SectionHeader>
       <main className="page">
         <div className="intro enter">
           <h1>Question Formatter</h1>
@@ -284,7 +248,7 @@ function Formatter({ bank, setBank, toReview }: { bank: Bank; setBank: (b: Bank)
 
             <form className="send" onSubmit={(e) => { e.preventDefault(); send(); }}>
               <h3>3. Send for approval</h3>
-              <p className="small muted">Your HoD checks the questions on the Approve page. Only approved ones go into the question bank and the games.</p>
+              <p className="small muted">Your HoD checks the questions on the HoD desk. Only approved ones go into the question bank and the games.</p>
               <div className="row">
                 <input type="text" aria-label="Your name" placeholder="Your name" value={teacher} autoComplete="name" onChange={(e) => { setTeacher(e.target.value); setSent(null); }} />
                 <button type="submit" className={`btn dark${done === 'send' ? ' is-done' : ''}`} disabled={!ready || !teacher.trim()}>
@@ -296,7 +260,7 @@ function Formatter({ bank, setBank, toReview }: { bank: Bank; setBank: (b: Bank)
                 <p className={`sent-note ${sent.sent ? 'ok' : 'warn'}`} key={JSON.stringify(sent)}>
                   {sent.sent ? <>Sent {plural(sent.sent, 'question')}. </> : 'Nothing new to send. '}
                   {sent.already > 0 && <>{plural(sent.already, 'question was', 'questions were')} already sent, so {sent.already === 1 ? 'it was' : 'they were'} skipped. </>}
-                  {sent.sent > 0 && <button type="button" className="linkish" onClick={toReview}>See them on the Approve page</button>}
+                  {sent.sent > 0 && <a className="linkish" href="/hod/">See them on the HoD desk</a>}
                 </p>
               )}
             </form>
@@ -313,6 +277,87 @@ function Formatter({ bank, setBank, toReview }: { bank: Bank; setBank: (b: Bank)
           </button>
         ) : null)}
       </div>
+    </>
+  );
+}
+
+/**
+ * The Questions box. A textarea can't style parts of its text, so a copy of the text sits behind it with the same font,
+ * padding and width: the copy is invisible except for the underlines on lines with a problem. The two scroll together.
+ * Moving the cursor onto an underlined line shows why it is underlined.
+ */
+export function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret }: {
+  value: string;
+  onChange: (v: string) => void;
+  onPaste: () => void;
+  /** The line just typed on (null when the box is left): problems there wait until the cursor moves on. */
+  onTyping: (line: number | null) => void;
+  issues: Issue[];
+  boxRef: RefObject<HTMLTextAreaElement | null>;
+  /** The line the cursor is on (set from outside too, when a listed problem is clicked). */
+  caret: number;
+  setCaret: (line: number) => void;
+}) {
+  const back = useRef<HTMLDivElement>(null);
+  const pasted = useRef(false); // a paste is finished text: check all of it at once
+
+  const sync = () => {
+    const ta = boxRef.current;
+    const b = back.current;
+    if (!ta || !b) return;
+    (b.firstElementChild as HTMLElement).style.width = `${ta.clientWidth}px`; // excludes the textarea's scrollbar
+    b.scrollTop = ta.scrollTop;
+    b.scrollLeft = ta.scrollLeft;
+  };
+  useLayoutEffect(sync);
+  useEffect(() => {
+    const ta = boxRef.current;
+    if (!ta || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(sync);
+    ro.observe(ta);
+    return () => ro.disconnect();
+  }, []);
+
+  const lineOf = (ta: HTMLTextAreaElement) => ta.value.slice(0, ta.selectionStart).split('\n').length;
+  const onCaret = (ta: HTMLTextAreaElement) => setCaret(lineOf(ta));
+  const levels = lineLevels(issues);
+  const here = issues.filter((x) => x.line === caret);
+  const errors = issues.filter((x) => x.level === 'error').length;
+
+  return (
+    <>
+      <div className="editor">
+        <div className="backdrop" ref={back} aria-hidden="true">
+          <div className="backdrop-in">
+            {value.split('\n').map((l, i) => {
+              const level = levels.get(i + 1);
+              const body = l.trim();
+              const nl = i > 0 ? '\n' : '';
+              if (!level || !body) return <Fragment key={i}>{nl}{l}</Fragment>;
+              const lead = l.slice(0, l.indexOf(body[0]));
+              return <Fragment key={i}>{nl}{lead}<span className={`mark ${level}`}>{body}</span>{l.slice(lead.length + body.length)}</Fragment>;
+            })}
+            {/* keeps an empty last line as tall as the textarea draws it */}
+            {'\u200b'}
+          </div>
+        </div>
+        <textarea id="q" ref={boxRef} spellCheck={false} value={value} aria-invalid={errors > 0} aria-describedby="caret-note"
+          onChange={(e) => {
+            onChange(e.target.value);
+            if (pasted.current) { pasted.current = false; onCaret(e.target); onTyping(null); } else onTyping(lineOf(e.target));
+          }}
+          onPaste={() => { pasted.current = true; onPaste(); }}
+          onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => onTyping(null)}
+          onScroll={sync} onSelect={(e) => onCaret(e.currentTarget)} onClick={(e) => onCaret(e.currentTarget)} onKeyUp={(e) => onCaret(e.currentTarget)}
+          placeholder={'Any format works, for example:\n\nTopic 1: Chemical equations\nWhat is ...? | Answer\n1. What is ...? Ans: Answer\nQ. What is ...?\nAns. Answer'} />
+      </div>
+      <p id="caret-note" className={`caret-note${here.length ? ` ${here.some((x) => x.level === 'error') ? 'error' : 'warn'}` : ''}`} aria-live="polite">
+        {here.length
+          ? <span className="swap" key={`l${caret}`}><b>Line {caret}:</b> {here.map((x) => x.text).join(' ')}</span>
+          : issues.length
+            ? <span className="swap" key="hint"><span className="key error">Red</span> lines are left out. <span className="key warn">Amber</span> lines are kept, but check them. Put the cursor on one to see why.</span>
+            : '\u00a0'}
+      </p>
     </>
   );
 }
@@ -347,6 +392,6 @@ async function copyText(text: string): Promise<boolean> {
 
 createRoot(document.getElementById('app')!).render(
   <StrictMode>
-    <App />
+    <Formatter />
   </StrictMode>,
 );

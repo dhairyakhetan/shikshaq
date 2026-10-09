@@ -1,88 +1,24 @@
 /**
- * The HoD's Approve page, and the question bank behind it.
- *
- * Teachers send questions from the formatter as a batch; they wait here until the HoD approves them or sends them back
- * with a reason. Only approved questions are the question bank the games use.
- *
- * Demo: the bank is kept in this browser (localStorage). Its shape matches the tables planned for Shikshaq's database
- * (a batch, and questions with a status, a note and a review time), so swapping the storage for the database is the only change.
+ * The HoD desk: teachers' batches wait here until the HoD approves each question or sends it back with a reason the
+ * teacher sees. Approved questions are the question bank the revision games use. Works on its own: it only reads and
+ * writes the database (src/db.ts).
  */
-import { useEffect, useState } from 'react';
-import { toCSV, toJSON, type Row } from './format';
-import { CheckIcon, DownloadIcon, RowsTable, useUndo } from './ui';
+import { StrictMode, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import '@fontsource/atkinson-hyperlegible/latin-400.css';
+import '@fontsource/atkinson-hyperlegible/latin-700.css';
+import '@fontsource/atkinson-hyperlegible-mono/latin-400.css';
+import '@fontsource-variable/bricolage-grotesque/index.css';
+import './styles.css';
+import { addSample, counts, EMPTY_BANK, setStatus, toCSV, toJSON, useBank, type BankQuestion, type Status } from './db';
+import { CheckIcon, DownloadIcon, RowsTable, SectionHeader, useUndo } from './ui';
 
-export type Status = 'pending' | 'approved' | 'rejected';
-export interface Batch { id: string; by: string; at: string }
-export interface BankQuestion extends Row { id: string; batch: string; status: Status; note: string; reviewedAt: string | null }
-export interface Bank { batches: Batch[]; questions: BankQuestion[] }
-
-export const EMPTY_BANK: Bank = { batches: [], questions: [] };
-const KEY = 'question-bank:v1';
-const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-
-/**
- * Adds a batch of questions. Questions with no chapter ID can't be linked to a chapter, so they aren't sent; a question
- * already waiting or approved for the same chapter isn't sent twice. One that was sent back can be sent again.
- */
-export function addBatch(bank: Bank, rows: Row[], by: string, at: string, newId: () => string) {
-  const ready = rows.filter((r) => r.chapter_id);
-  const fresh = ready.filter((r) => !bank.questions.some((q) => q.status !== 'rejected' && q.chapter_id === r.chapter_id && norm(q.question) === norm(r.question)));
-  const result = { noId: rows.length - ready.length, already: ready.length - fresh.length, sent: fresh.length };
-  if (!fresh.length) return { bank, ...result };
-  const batch: Batch = { id: newId(), by: by.trim(), at };
-  const questions = fresh.map((r): BankQuestion => ({ ...r, id: newId(), batch: batch.id, status: 'pending', note: '', reviewedAt: null }));
-  return { bank: { batches: [...bank.batches, batch], questions: [...bank.questions, ...questions] }, ...result };
-}
-
-/** Approve, send back (with the reason the teacher sees) or move back to waiting. */
-export function setStatus(bank: Bank, ids: string[], status: Status, note: string, at: string): Bank {
-  const pick = new Set(ids);
-  return {
-    ...bank,
-    questions: bank.questions.map((q) => (pick.has(q.id) ? { ...q, status, note: status === 'rejected' ? note.trim() : '', reviewedAt: status === 'pending' ? null : at } : q)),
-  };
-}
-
-export const counts = (bank: Bank): Record<Status, number> => ({
-  pending: bank.questions.filter((q) => q.status === 'pending').length,
-  approved: bank.questions.filter((q) => q.status === 'approved').length,
-  rejected: bank.questions.filter((q) => q.status === 'rejected').length,
-});
-
-function loadBank(): Bank {
-  try {
-    const v = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    return Array.isArray(v?.batches) && Array.isArray(v?.questions) ? v : EMPTY_BANK;
-  } catch { return EMPTY_BANK; }
-}
-
-/** The bank, saved in this browser and kept in step across open tabs. */
-export function useBank() {
-  const [bank, setBank] = useState<Bank>(loadBank);
-  useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(bank)); } catch { /* storage full or blocked */ }
-  }, [bank]);
-  useEffect(() => {
-    const on = (e: StorageEvent) => { if (e.key === KEY) setBank(loadBank()); };
-    addEventListener('storage', on);
-    return () => removeEventListener('storage', on);
-  }, []);
-  return [bank, setBank] as const;
-}
-
-export const newId = () => (typeof crypto?.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`);
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const TABS: { key: Status; label: string }[] = [{ key: 'pending', label: 'Waiting' }, { key: 'approved', label: 'Approved' }, { key: 'rejected', label: 'Sent back' }];
 
-export function ReviewPage({ bank, setBank, sample, toFormatter, save }: {
-  bank: Bank;
-  setBank: (f: Bank | ((b: Bank) => Bank)) => void;
-  /** Adds a sample batch, so the page can be tried without the formatter. */
-  sample: () => void;
-  toFormatter: () => void;
-  save: (name: string, text: string, mime: string) => void;
-}) {
+function HodDesk() {
+  const [bank, setBank] = useBank();
   const [tab, setTab] = useState<Status>('pending');
   const [back, setBack] = useState<{ where: string; ids: string[] } | null>(null); // the "why?" box that is open
   const [reason, setReason] = useState('');
@@ -147,13 +83,15 @@ export function ReviewPage({ bank, setBank, sample, toFormatter, save }: {
     .reverse(); // newest first
 
   return (
+    <>
+    <SectionHeader here="hod" waiting={c.pending} />
     <main className="page review">
       <div className="intro enter">
         <h1>Approve questions</h1>
         <p>Questions teachers send from the formatter wait here. Only approved questions go into the question bank and the games.</p>
       </div>
       <p className="demo enter">
-        <b>Demo:</b> everything here is saved in this browser only. In Shikshaq, only HoDs will open this page, and approvals will be saved in the database.
+        <b>Demo:</b> everything here is saved in this browser only. In Shikshaq, only HoDs will open the HoD desk, and approvals will be saved in the database.
         {bank.questions.length > 0 && <> <button type="button" className="linkish" onClick={clearAll}>Clear the demo</button></>}
       </p>
 
@@ -186,8 +124,8 @@ export function ReviewPage({ bank, setBank, sample, toFormatter, save }: {
         <div className="empty-state enter">
           <p><b>Nothing is waiting.</b> Questions sent from the formatter appear here.</p>
           <div className="row">
-            <button type="button" className="btn primary" onClick={sample}>Add a sample batch</button>
-            <button type="button" className="btn quiet" onClick={toFormatter}>Go to the formatter</button>
+            <button type="button" className="btn primary" onClick={() => setBank((b) => addSample(b, 'pending'))}>Add a sample batch</button>
+            <a className="btn quiet" href="/">Go to the formatter</a>
           </div>
         </div>
       ))}
@@ -211,5 +149,23 @@ export function ReviewPage({ bank, setBank, sample, toFormatter, save }: {
 
       <div className="floating" aria-live="polite">{toast}</div>
     </main>
+    </>
   );
 }
+
+function save(name: string, text: string, mime: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: `${mime};charset=utf-8` }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+createRoot(document.getElementById('app')!).render(
+  <StrictMode>
+    <HodDesk />
+  </StrictMode>,
+);

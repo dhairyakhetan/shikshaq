@@ -16,35 +16,10 @@ import {
   boardClassProblem, chapterId, checkBoard, checkClass, checkNumbered, checkSubject, MAX_NO, plainLine, readMeta, topicId,
   tidy, type Level, type MetaKey, type Problem,
 } from './details';
+import { type Difficulty, type Row } from './db';
 
-export type Difficulty = 'easy' | 'medium' | 'hard';
-export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
 export const MAX_QUESTION = 300;
 export const MAX_ANSWER = 100;
-
-/** The columns of a row, in order. These are the column names of the CSV and the keys of the JSON. */
-export const COLUMNS = ['chapter_id', 'topic_id', 'board', 'class', 'subject', 'chapter_no', 'chapter', 'topic_no', 'topic', 'question_no', 'question', 'answer', 'difficulty'] as const;
-
-export interface Row {
-  /** Board code + class + subject code + chapter number, such as CBSE10SCI01. Null until all four are known. */
-  chapter_id: string | null;
-  /** Chapter ID + "T" + topic number, such as CBSE10SCI01T02. */
-  topic_id: string | null;
-  board: string;
-  class: number | null;
-  subject: string;
-  chapter_no: number | null;
-  chapter: string;
-  topic_no: number | null;
-  topic: string;
-  /** Position of the question within its topic (within its chapter when there is no topic), from 1. */
-  question_no: number;
-  question: string;
-  answer: string;
-  difficulty: Difficulty | null;
-  /** The line of the pasted text the question came from. Not exported. */
-  line: number;
-}
 
 export interface Issue { line: number; level: Level; text: string }
 
@@ -376,34 +351,6 @@ export function lineLevels(issues: Issue[]): Map<number, Level> {
   for (const x of issues) if (out.get(x.line) !== 'error') out.set(x.line, x.level);
   return out;
 }
-
-// ---------------------------------------------------------------- output for the database
-
-type Record_ = Record<(typeof COLUMNS)[number], string | number | null>;
-
-/** A row as the database sees it: the columns only, with an empty value as null. */
-export function toRecord(r: Row): Record_ {
-  const out = {} as Record_;
-  for (const c of COLUMNS) out[c] = r[c] === '' ? null : r[c];
-  return out;
-}
-
-/** A header row, then one line per question. */
-function table(rows: Row[], sep: string, cell: (v: string) => string): string {
-  const line = (r: Row) => {
-    const rec = toRecord(r);
-    return COLUMNS.map((c) => cell(String(rec[c] ?? ''))).join(sep);
-  };
-  return [COLUMNS.join(sep), ...rows.map(line)].join('\n');
-}
-
-/** CSV with a header row (RFC 4180 quoting, no byte-order mark), ready to import into a table. */
-export const toCSV = (rows: Row[]) => table(rows, ',', (v) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)) + '\n';
-
-export const toJSON = (rows: Row[]) => JSON.stringify(rows.map(toRecord), null, 2) + '\n';
-
-/** Tab-separated with a header row, for pasting into Google Sheets or Excel. */
-export const toTSV = (rows: Row[]) => table(rows, '\t', (v) => v.replace(/\t/g, ' '));
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 

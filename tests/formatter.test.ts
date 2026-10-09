@@ -4,9 +4,9 @@ import {
   STATES, SUBJECTS, titleCase, writeDetail,
 } from '../src/details';
 import {
-  baseName, EXAMPLE, format, lineLevels, MAX_ANSWER, MAX_QUESTION, missing, NO_ANSWER, toCSV, toJSON, toRecord, toTSV, visibleIssues,
+  baseName, EXAMPLE, format, lineLevels, MAX_ANSWER, MAX_QUESTION, missing, NO_ANSWER, visibleIssues,
 } from '../src/format';
-import { addBatch, counts, EMPTY_BANK, setStatus } from '../src/review';
+import { addBatch, addSample, counts, EMPTY_BANK, SAMPLE, setStatus, toCSV, toJSON, toRecord, toTSV } from '../src/db';
 
 const qa = (raw: string) => format(raw).rows.map((r) => [r.question, r.answer]);
 const HEAD = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Matter\n';
@@ -427,6 +427,14 @@ describe('approval (the question bank behind the Approve page)', () => {
     const back = setStatus(next, [c], 'pending', '', at);
     expect(back.questions.find((q) => q.id === c)).toMatchObject({ status: 'pending', note: '', reviewedAt: null });
     expect(bank.questions.every((q) => q.status === 'pending')).toBe(true); // the original is untouched (so undo works)
+  });
+
+  it('has a sample set that each part can load on its own', () => {
+    expect(SAMPLE).toHaveLength(18);
+    expect(new Set(SAMPLE.map((r) => r.topic_id))).toEqual(new Set(['CBSE10SCI01T01', 'CBSE10SCI01T02', 'CBSE10SCI01T03']));
+    expect(counts(addSample(EMPTY_BANK, 'pending'))).toEqual({ pending: 18, approved: 0, rejected: 0 });
+    expect(counts(addSample(EMPTY_BANK, 'approved'))).toEqual({ pending: 0, approved: 18, rejected: 0 });
+    expect(counts(addSample(addSample(EMPTY_BANK, 'approved'), 'pending'))).toEqual({ pending: 0, approved: 18, rejected: 0 }); // not twice
   });
 
   it('lets a question that was sent back be sent again', () => {

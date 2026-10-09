@@ -1,4 +1,17 @@
-# Question Formatter
+# Shikshaq question bank and revision games
+
+Three separate parts, each its own page. They work without each other and share only the question bank (`src/db.ts`):
+
+| Page | For | What it does |
+| --- | --- | --- |
+| `/` **Question formatter** | Teachers | Paste questions and answers in any format, get clean rows, send them to the HoD. |
+| `/hod/` **HoD desk** | The HoD | Approve questions or send them back with a reason. Approved questions are the question bank. |
+| `/play/` **Revise** | Students | Pick the topics you studied and play a crossword, word search, matching or fill-in-the-blank puzzle made from them. |
+
+For now the question bank is a demo saved in the browser (`localStorage`); in Shikshaq it will be the database, and
+`useBank` in `src/db.ts` is the only thing that changes.
+
+## Question formatter (`/`)
 
 Paste questions and answers in any format; get clean rows for the question bank, one row per question:
 
@@ -49,13 +62,27 @@ The lists live in `src/details.ts`.
 - **How to write your questions**: a guide for people at the bottom of the page (formats, detail lines, good questions, what the
   underlines mean, the IDs, board and subject codes, starting from notes).
 
-## Approval (`/review`)
+## HoD desk (`/hod/`)
 
-Teachers press **Send for approval** (with their name) on the Format page. On the **Approve** page the HoD sees each batch,
+Teachers press **Send for approval** (with their name) on the formatter. On the HoD desk the HoD sees each batch,
 grouped by chapter and topic, and approves questions or sends them back with a reason the teacher sees, one by one or the
 whole batch; every action can be undone. **Approved** is the question bank the games use, and downloads as CSV or JSON.
 A question with no chapter ID can't be sent, and one already waiting or approved isn't sent twice. For now this is a demo
 saved in the browser (`localStorage`); in Shikshaq only HoDs will see it and it will be saved in the database.
+
+## Revise (`/play/`)
+
+Students pick a chapter and tick the topics they studied. Every game those questions can make is offered (a game that
+can't be made, say because the answers are too long for a grid, is greyed out); **New puzzle** makes another.
+
+- **Crossword**: tap a square and type; tap it again to switch between across and down. Check marks wrong letters;
+  Reveal word fills one in. Works with a phone's on-screen keyboard.
+- **Word search**: drag across a word, or tap its first and last letter. The clues are the questions; the words can be shown.
+- **Matching**: tap a question, then its answer (or the other way round).
+- **Fill in the blank**: type in the gap and press Enter. Capitals, accents and punctuation don't matter; after two wrong tries
+  the answer can be shown.
+
+Only approved questions are used, and a question the HoD takes back disappears at once.
 
 ## What it reads
 
@@ -103,12 +130,12 @@ button: it points the chatbot at this page.
 `tests/instructions.test.ts` fails if the instructions and the code disagree (columns, IDs, boards, limits, difficulty words, labels on
 the page), if the template, the worked example or the guide's example would produce a single warning, or if the hiding setup changes.
 
-## Revision games (engine)
+## Revision games engine
 
 `src/games/` makes matching, fill-in-the-blank, word search and crossword puzzles from bank questions, on the student's
 device, with no AI: the same questions and seed always give the same puzzle. Every game has a maker and a separate
 checker, and a puzzle is only returned after its checker passes it; otherwise it is made again with a new seed, then the
-next game is tried. The rules for each game, the guarantee and the stress results are in [docs/games.md](docs/games.md).
+next game is tried. Revise uses it; it has no page code, so the same files can go into Shikshaq. The rules for each game, the guarantee and the stress results are in [docs/games.md](docs/games.md).
 
 ```ts
 import { makePuzzle, seedOf, sameAnswer } from './src/games';

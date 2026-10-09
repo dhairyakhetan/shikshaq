@@ -2,13 +2,14 @@ import { readFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { describe, expect, it } from 'vitest';
 import { BOARDS } from '../src/details';
-import { COLUMNS, DIFFICULTIES, format, MAX_ANSWER, MAX_QUESTION, missing } from '../src/format';
+import { COLUMNS, DIFFICULTIES } from '../src/db';
+import { format, MAX_ANSWER, MAX_QUESTION, missing } from '../src/format';
 import config from '../vite.config';
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const html = read('src/instructions.html');
 const index = read('index.html');
-const app = read('src/main.tsx');
+const app = read('src/formatter.tsx');
 const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 const unescape = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 const block = (id: string) => unescape(html.match(new RegExp(`<pre id="${id}"><code>([\\s\\S]*?)</code></pre>`))![1]);

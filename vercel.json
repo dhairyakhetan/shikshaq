@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "trailingSlash": true,
   "headers": [
     {
       "source": "/(.*)",
@@ -28,10 +29,16 @@
       ]
     }
   ],
-  "rewrites": [
+  "redirects": [
     {
       "source": "/review",
-      "destination": "/index.html"
+      "destination": "/hod/",
+      "permanent": false
+    },
+    {
+      "source": "/review/",
+      "destination": "/hod/",
+      "permanent": false
     }
   ]
 }
