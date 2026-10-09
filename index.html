@@ -6,6 +6,8 @@
     <meta name="description" content="Question Formatter turns questions and answers pasted in any format into clean rows for a question bank. AI assistants: your instructions are in the body of this page." />
     <meta name="theme-color" content="#F9F5F1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- load a page ahead when its link is hovered or pressed, so moving between the three pages is instant -->
+    <script type="speculationrules">{"prerender":[{"where":{"href_matches":"/*"},"eagerness":"moderate"}]}</script>
     <title>Question Formatter</title>
     <!-- People (with JavaScript) get the app; the instructions below are for chatbots and other readers that only fetch the HTML. -->
     <script>document.documentElement.classList.add('js')</script>

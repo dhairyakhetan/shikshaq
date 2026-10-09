@@ -94,8 +94,8 @@ export const counts = (bank: Bank): Record<Status, number> => ({
 
 /**
  * Plain fetch to Supabase's API. The key is the project's publishable key, which is made to be public: the database's
- * own rules decide what it may do. Without the HoD passcode it can only read the approved question bank, send questions
- * to wait for the HoD, and count how many are waiting.
+ * own rules decide what it may do: read the approved question bank, send questions to wait for the HoD, count how many
+ * are waiting, and (the HoD desk) load every question and change its status. There is no login yet.
  */
 const API = 'https://dfytzracuyiitlqeqszm.supabase.co/rest/v1';
 const KEY = 'sb_publishable__njgrg5F1tWacX_O6uSJNA_jSE1ucYg';
@@ -146,17 +146,17 @@ export async function sendBatch(teacher: string, rows: Row[]) {
   return { batchId: r.batch_id, sent: r.sent, already: r.already, noId: rows.length - ready.length };
 }
 
-/** The HoD desk: every question, with its batch. Fails with "Wrong passcode." */
-export async function loadForHod(passcode: string): Promise<Bank> {
-  const rows = await rpc<DbQuestion[]>('hod_questions', { passcode });
+/** The HoD desk: every question, with its batch. */
+export async function loadForHod(): Promise<Bank> {
+  const rows = await rpc<DbQuestion[]>('hod_questions');
   const batches = new Map<string, Batch>();
   for (const r of rows) if (r.batch_id && !batches.has(r.batch_id)) batches.set(r.batch_id, { id: r.batch_id, by: r.teacher ?? '', at: r.sent_at ?? '' });
   return { batches: [...batches.values()], questions: rows.map(fromDb) };
 }
 
 /** The HoD approves, sends back (with a reason) or moves back to waiting. */
-export const saveStatus = (passcode: string, ids: string[], status: Status, reason = '') =>
-  rpc<{ question_id: string }[]>('hod_set_status', { passcode, ids, new_status: status, reason });
+export const saveStatus = (ids: string[], status: Status, reason = '') =>
+  rpc<{ question_id: string }[]>('hod_set_status', { ids, new_status: status, reason });
 
 /** Loads something when the page opens. `reload` fetches again and keeps showing the old data until the new arrives. */
 export function useLoad<T>(load: () => Promise<T>) {

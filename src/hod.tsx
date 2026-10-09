@@ -1,12 +1,12 @@
 /**
  * The HoD desk: teachers' batches wait here until the HoD approves each question or sends it back with a reason the
  * teacher sees. Approved questions go into the question bank the revision games use. Works on its own: it only reads and
- * writes the database (src/db.ts), and only with the HoD passcode, which is kept in memory and never saved.
+ * writes the database (src/db.ts). There is no login yet: anyone with the link can use it.
  */
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
-import { counts, loadForHod, saveStatus, setStatus, toCSV, toJSON, useLoad, waitingCount, type Bank, type BankQuestion, type Status } from './db';
+import { counts, loadForHod, saveStatus, setStatus, toCSV, toJSON, useLoad, type Bank, type BankQuestion, type Status } from './db';
 import { CheckIcon, DownloadIcon, RowsTable, SectionHeader, useUndo } from './ui';
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
@@ -14,12 +14,9 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 const TABS: { key: Status; label: string }[] = [{ key: 'pending', label: 'Waiting' }, { key: 'approved', label: 'Approved' }, { key: 'rejected', label: 'Sent back' }];
 
 function HodDesk() {
-  const waiting = useLoad(waitingCount);
-  const [pass, setPass] = useState('');
-  const [key, setKey] = useState(''); // the passcode that opened the desk
-  const [opening, setOpening] = useState(false);
-  const [openError, setOpenError] = useState('');
-  const [bank, setBank] = useState<Bank | null>(null);
+  const loaded = useLoad(loadForHod);
+  const [edited, setBank] = useState<Bank | null>(null); // the page's copy once the HoD changes something
+  const bank = edited ?? loaded.data;
   const [saveError, setSaveError] = useState('');
   const [tab, setTab] = useState<Status>('pending');
   const [back, setBack] = useState<{ where: string; ids: string[] } | null>(null); // the "why?" box that is open
@@ -27,42 +24,30 @@ function HodDesk() {
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
   const { offer, toast } = useUndo();
 
-  const open = async (passcode: string) => {
-    setOpening(true);
-    setOpenError('');
-    try {
-      setBank(await loadForHod(passcode));
-      setKey(passcode);
-    } catch (e) {
-      setOpenError((e as Error).message === 'Wrong passcode.' ? 'That passcode is not right.' : (e as Error).message);
-    } finally {
-      setOpening(false);
-    }
-  };
   /** When a save fails, say so and show what the database really holds. */
   const failed = (e: unknown) => {
     setSaveError(`That change wasn't saved: ${(e as Error).message}`);
-    loadForHod(key).then(setBank, () => {});
+    loadForHod().then(setBank, () => {});
   };
+  const refresh = () => { setBank(null); loaded.reload(); };
 
   if (!bank) {
     return (
       <>
-        <SectionHeader here="hod" waiting={waiting.data ?? 0} />
+        <SectionHeader here="hod" />
         <main className="page review">
           <div className="intro enter">
             <h1>Approve questions</h1>
             <p>Questions teachers send from the formatter wait here. Only approved questions go into the question bank and the games.</p>
           </div>
-          <form className="card stack unlock enter" onSubmit={(e) => { e.preventDefault(); if (pass) open(pass); }}>
-            <h2>Enter the HoD passcode</h2>
-            <p className="small muted">Only HoDs can approve questions. The passcode isn't saved, so it is needed each time this page is opened.</p>
-            <div className="row">
-              <input type="password" aria-label="HoD passcode" placeholder="Passcode" autoComplete="current-password" value={pass} autoFocus onChange={(e) => { setPass(e.target.value); setOpenError(''); }} />
-              <button type="submit" className="btn primary" disabled={!pass || opening}>{opening ? 'Opening…' : 'Open the HoD desk'}</button>
-            </div>
-            {openError && <p className="sent-note warn" role="alert">{openError}</p>}
-          </form>
+          <div className="empty-state enter" aria-live="polite">
+            {loaded.error ? (
+              <>
+                <p><b>Couldn't load the questions.</b> {loaded.error}</p>
+                <button type="button" className="btn primary" onClick={refresh}>Try again</button>
+              </>
+            ) : <p>Loading the questions…</p>}
+          </div>
         </main>
       </>
     );
@@ -79,17 +64,17 @@ function HodDesk() {
     setSaveError('');
     setLeaving(new Set(ids));
     setTimeout(() => {
-      setBank((b) => b && setStatus(b, ids, status, note, new Date().toISOString()));
+      setBank((b) => setStatus(b ?? before, ids, status, note, new Date().toISOString()));
       setLeaving(new Set());
     }, 220);
-    saveStatus(key, ids, status, note).catch(failed);
+    saveStatus(ids, status, note).catch(failed);
     const did = status === 'approved' ? 'approved' : status === 'rejected' ? 'sent back' : 'moved to waiting';
     offer(`${plural(ids.length, 'question')} ${did}`, () => {
       setBank(before);
       // put each question back as it was (questions sent back keep their own reason)
       const groups = new Map<string, BankQuestion[]>();
       for (const q of old) groups.set(`${q.status}\u0000${q.note}`, [...(groups.get(`${q.status}\u0000${q.note}`) ?? []), q]);
-      Promise.all([...groups.values()].map((qs) => saveStatus(key, qs.map((q) => q.id), qs[0].status, qs[0].note))).catch(failed);
+      Promise.all([...groups.values()].map((qs) => saveStatus(qs.map((q) => q.id), qs[0].status, qs[0].note))).catch(failed);
     });
   };
 
@@ -169,7 +154,7 @@ function HodDesk() {
         <div className="empty-state enter">
           <p><b>Nothing is waiting.</b> Questions teachers send from the formatter appear here.</p>
           <div className="row">
-            <button type="button" className="btn primary" onClick={() => open(key)}>Check for new questions</button>
+            <button type="button" className="btn primary" onClick={refresh}>Check for new questions</button>
             <a className="btn quiet" href="/">Go to the formatter</a>
           </div>
         </div>

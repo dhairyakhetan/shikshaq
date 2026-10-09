@@ -12,24 +12,18 @@
 -- The website never reads or writes `batches` or `questions` itself. It calls the functions at the end:
 --   submit_batch     the formatter sends a teacher's questions (they wait for the HoD)
 --   waiting_count    how many questions are waiting (the number in the header)
---   hod_questions    the HoD desk loads every question (needs the HoD passcode)
---   hod_set_status   the HoD approves, sends back or moves back to waiting (needs the HoD passcode)
+--   hod_questions    the HoD desk loads every question
+--   hod_set_status   the HoD approves, sends back or moves back to waiting
 -- and reads `question_bank` directly (Revise). Anyone can read `question_bank`; nobody can write to it but the trigger.
 --
--- The HoD passcode is stored only as a hash, in private.settings (not reachable through the API). To change it, run:
---   update private.settings set value = extensions.crypt('new passcode', extensions.gen_salt('bf', 8)) where key = 'hod_passcode';
+-- For now there is no login: anyone with the link can use the HoD desk. Logins will decide who counts as an HoD.
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
 
-create table private.settings (key text primary key, value text not null);
-
 -- how two questions are compared: case and extra spaces don't matter
 create function private.norm(t text) returns text language sql immutable set search_path = ''
 as $$ select lower(regexp_replace(btrim(t), '\s+', ' ', 'g')) $$;
-
-create function private.is_hod(passcode text) returns boolean language sql stable security definer set search_path = ''
-as $$ select exists (select 1 from private.settings where key = 'hod_passcode' and value = extensions.crypt(coalesce(passcode, ''), value)) $$;
 
 -- ---------------------------------------------------------------- tables
 
@@ -212,26 +206,21 @@ create function public.waiting_count() returns int language sql stable security 
 as $$ select count(*)::int from public.questions where status = 'pending' $$;
 
 -- The HoD desk: every question, with who sent it and when.
-create function public.hod_questions(passcode text) returns jsonb
-language plpgsql stable security definer set search_path = ''
+create function public.hod_questions() returns jsonb
+language sql stable security definer set search_path = ''
 as $$
-begin
-  if not private.is_hod(passcode) then raise exception 'Wrong passcode.'; end if;
-  return coalesce((
-    select jsonb_agg(to_jsonb(q) || jsonb_build_object('teacher', b.teacher, 'sent_at', b.sent_at) order by b.sent_at, q.question_id)
-    from public.questions q join public.batches b on b.batch_id = q.batch_id
-  ), '[]');
-end $$;
+  select coalesce(jsonb_agg(to_jsonb(q) || jsonb_build_object('teacher', b.teacher, 'sent_at', b.sent_at) order by b.sent_at, q.question_id), '[]')
+  from public.questions q join public.batches b on b.batch_id = q.batch_id
+$$;
 
 -- The HoD approves (approved), sends back with a reason (rejected) or moves back to waiting (pending).
-create function public.hod_set_status(passcode text, ids text[], new_status text, reason text default '') returns jsonb
+create function public.hod_set_status(ids text[], new_status text, reason text default '') returns jsonb
 language plpgsql security definer set search_path = ''
 as $$
 declare
   why text := btrim(coalesce(reason, ''));
   done jsonb;
 begin
-  if not private.is_hod(passcode) then raise exception 'Wrong passcode.'; end if;
   if new_status not in ('pending', 'approved', 'rejected') then raise exception 'Unknown status.'; end if;
   if new_status = 'rejected' and why = '' then raise exception 'Say why the question is going back.'; end if;
   with changed as (
@@ -246,7 +235,7 @@ begin
   return done;
 end $$;
 
-revoke execute on function public.submit_batch(text, jsonb), public.waiting_count(), public.hod_questions(text),
-  public.hod_set_status(text, text[], text, text) from public;
-grant execute on function public.submit_batch(text, jsonb), public.waiting_count(), public.hod_questions(text),
-  public.hod_set_status(text, text[], text, text) to anon, authenticated;
+revoke execute on function public.submit_batch(text, jsonb), public.waiting_count(), public.hod_questions(),
+  public.hod_set_status(text[], text, text) from public;
+grant execute on function public.submit_batch(text, jsonb), public.waiting_count(), public.hod_questions(),
+  public.hod_set_status(text[], text, text) to anon, authenticated;

@@ -55,11 +55,11 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5. Deployed on Vercel from `main` 
 | `src/instructions.html` | Instructions for AI assistants: how to get the material, work out board/class/subject/chapter/topics, write short-answer questions, and reply in the exact format the formatter reads. Has `<pre id="format">` and `<pre id="example">`, which the tests parse. |
 | `src/formatter.tsx` | The formatter page. The text (the single source of truth; not saved), the cursor line, which detail box is being typed in, undo, button feedback. Runs `format()`, decides which problems to show (`visibleIssues`), builds the notes, and handles download, copy, "Send for approval" (`sendBatch`; the note shows the new batch ID), smooth scrolling and the phone "jump to results" pill. Also `Editor`, the Questions box: a transparent textarea over an exact copy of its text that carries the red/amber underlines; the copy is kept to the same width and scroll, and the note under it explains the line the cursor is on. |
 | `src/Guide.tsx` | "How to write your questions", the guide for people at the bottom of the formatter. Board and subject code lists and limits come from the code, so they can't drift. Cards fade in as they scroll into view. |
-| `src/hod.tsx` | The HoD desk. Asks for the HoD passcode first (kept in memory only, so it is asked each visit), then loads every question (`loadForHod`). Tabs Waiting / Approved / Sent back, batches grouped by chapter and topic, approve or send back per question or per batch, the reason box, rows sliding away, every change saved at once (`saveStatus`) and undoable for a few seconds, "Check for new questions" when nothing is waiting, download of the approved bank. |
+| `src/hod.tsx` | The HoD desk. Loads every question when it opens (`loadForHod`); no login yet. Tabs Waiting / Approved / Sent back, batches grouped by chapter and topic, approve or send back per question or per batch, the reason box, rows sliding away, every change saved at once (`saveStatus`) and undoable for a few seconds, "Check for new questions" when nothing is waiting, download of the approved bank. |
 | `src/play.tsx` | Revise. Loads the `question_bank` table (`loadQuestionBank`; says so when it is empty or can't be reached), groups the questions into chapters and topics (`chaptersOf`, ordered by class, subject, chapter), Class and Subject pills, chapter cards (number, name, topics, questions) and topic chips, makes every game the chosen topics allow (only checked puzzles; a game that can't be made is greyed out), "New puzzle" (a new seed). |
 | `src/playgames.tsx` | The four games, playable. Matching: tap a question, then its answer (either side first). Fill in the blank: type in the gap, Enter; "Show answer" after 2 wrong tries. Word search: drag across a word, or tap its first and last letter. Crossword: tap a square and type (a hidden input catches keys and phone keyboards), Backspace, arrows, Enter for the next clue, tap again to switch across/down, Check, Reveal word. Each ends with a "Next puzzle" banner. |
 | `src/ui.tsx` | What the three pages share on screen: `SectionHeader` (the header with links to the three parts and the number waiting), `RowsTable` (rows grouped by chapter and topic with their IDs; rows slide in; optional buttons under each row), `useUndo` (the "Undo" bar), the icons (`ActionIcon` swaps an icon for a check mark without resizing the button) and `Logo`. |
-| `src/styles.css` | All styling, for all three pages, in Shikshaq's look (taken from its `tailwind.config.ts` and `src/index.css`): warm cream page, bone cards with a soft shadow instead of a border, near-black pill buttons, orange and indigo accents, Geist / Geist Mono / Archivo (bundled, imported at the top). Colours are Shikshaq's values, as variables on `:root`. Hover only applies where there is a mouse. The motion section at the end uses Shikshaq's curve and timings; only success moments pop; only transform and opacity animate; "reduce motion" turns sliding, scaling and shaking off (`--rise`, `--press`, `--pop`, `--reveal` become 0/1). |
+| `src/styles.css` | All styling, for all three pages, including the page-to-page transition (`@view-transition`: the header stays, the dark pill slides to the new page's link, the page crossfades; each HTML file also preloads a page when its link is hovered), in Shikshaq's look (taken from its `tailwind.config.ts` and `src/index.css`): warm cream page, bone cards with a soft shadow instead of a border, near-black pill buttons, orange and indigo accents, Geist / Geist Mono / Archivo (bundled, imported at the top). Colours are Shikshaq's values, as variables on `:root`. Hover only applies where there is a mouse. The motion section at the end uses Shikshaq's curve and timings; only success moments pop; only transform and opacity animate; "reduce motion" turns sliding, scaling and shaking off (`--rise`, `--press`, `--pop`, `--reveal` become 0/1). |
 | `public/favicon.svg` | Tab icon. |
 | `vercel.json` | Security headers, long caching for hashed files in `/assets/`, `trailingSlash` (so `/hod` opens `/hod/`), and the old `/review` address sent to `/hod/`. |
 
@@ -129,17 +129,13 @@ applied. Change the database only by editing that file and running the change in
 call four functions:
 - `submit_batch(teacher, questions)` (formatter): adds a batch as waiting, skips duplicates, gives the IDs.
 - `waiting_count()`: the number in the header.
-- `hod_questions(passcode)` and `hod_set_status(passcode, ids, new_status, reason)` (HoD desk): need the HoD passcode.
+- `hod_questions()` and `hod_set_status(ids, new_status, reason)` (HoD desk).
 
-`batches` and `questions` can't be read or written directly with that key. The HoD passcode is stored only as a hash in
-`private.settings` (not reachable from the API) and is not in this repo. To change it, run in the SQL editor:
-`update private.settings set value = extensions.crypt('new passcode', extensions.gen_salt('bf', 8)) where key = 'hod_passcode';`
-
-The project also has three old, empty tables (`chapters`, `games`, `game_questions`) from an earlier design where the HoD
-approved games. Nothing uses them.
+`batches` and `questions` can't be read or written directly with that key. There is no login yet, so anyone with the
+link can use the HoD desk; logins will decide who counts as an HoD.
 
 ## Where this is going
 
-Done: the three pages on a real database. Next: logins (teachers, HoDs, students) in place of the passcode, a place for
+Done: the three pages on a real database. Next: logins (teachers, HoDs, students), so only HoDs can approve, a place for
 teachers to see what was sent back and why, and moving the pages into `kushalsetha/Shikshaq`. Never push to their repo
 without the user's OK.
