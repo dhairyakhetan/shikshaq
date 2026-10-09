@@ -6,7 +6,7 @@
 import { StrictMode, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
-import { counts, useBank, type BankQuestion } from './db';
+import { loadQuestionBank, useLoad, waitingCount, type BankQuestion } from './db';
 import { GAME_TYPES, makeGame, seedOf, type Game, type GameType, type Item } from './games';
 import { GameView } from './playgames';
 import { SectionHeader } from './ui';
@@ -41,8 +41,9 @@ function chaptersOf(questions: BankQuestion[]): Chapter[] {
 }
 
 function Revise() {
-  const [bank] = useBank();
-  const chapters = useMemo(() => chaptersOf(bank.questions.filter((q) => q.status === 'approved')), [bank]);
+  const bank = useLoad(loadQuestionBank);
+  const waiting = useLoad(waitingCount);
+  const chapters = useMemo(() => chaptersOf(bank.data ?? []), [bank.data]);
   const [pick, setPickState] = useState({ chapter: '', topics: [] as string[] });
   const [round, setRound] = useState(0);
   const [want, setWant] = useState<GameType | null>(null);
@@ -79,7 +80,7 @@ function Revise() {
 
   return (
     <>
-      <SectionHeader here="play" waiting={counts(bank).pending} />
+      <SectionHeader here="play" waiting={waiting.data ?? 0} />
       <main className="page play">
         <div className="intro enter">
           <h1>Revise</h1>
@@ -87,8 +88,17 @@ function Revise() {
         </div>
 
         {!chapter ? (
-          <div className="empty-state enter">
-            <p><b>No approved questions yet.</b> Questions appear here once the HoD approves them.</p>
+          <div className="empty-state enter" aria-live="polite">
+            {bank.error ? (
+              <>
+                <p><b>Couldn't load the questions.</b> {bank.error}</p>
+                <button type="button" className="btn primary" onClick={bank.reload}>Try again</button>
+              </>
+            ) : !bank.data ? (
+              <p>Loading the questions…</p>
+            ) : (
+              <p><b>The question bank is empty.</b> Questions appear here once teachers send them and the HoD approves them.</p>
+            )}
           </div>
         ) : (
           <>
@@ -155,7 +165,6 @@ function Revise() {
                 <p className="empty">These topics don't have enough questions for a puzzle yet. Pick more topics.</p>
               )}
             </section>
-            <p className="demo small">Demo: these are sample questions built into the page, and nothing is saved. In Shikshaq they will come from the database, and only questions the HoD approved are shown.</p>
           </>
         )}
       </main>

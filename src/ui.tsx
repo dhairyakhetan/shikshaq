@@ -103,7 +103,7 @@ export type Section = (typeof SECTIONS)[number]['key'];
 
 /**
  * The header. The three parts are separate pages that work without each other; in Shikshaq they will sit in different
- * places (teachers, HoDs, students). For the demo, the header links them, and shows how many questions are waiting.
+ * places (teachers, HoDs, students). Here the header links them, and shows how many questions are waiting.
  */
 export function SectionHeader({ here, waiting = 0, children }: { here: Section; waiting?: number; children?: ReactNode }) {
   return (

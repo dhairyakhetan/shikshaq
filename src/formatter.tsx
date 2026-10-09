@@ -3,7 +3,7 @@ import { Fragment, StrictMode, useDeferredValue, useEffect, useLayoutEffect, use
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { checkDetail, DETAIL_KEYS, detailLine, detailsId, LABEL, readDetails, standardDetail, writeDetail, type DetailKey } from './details';
-import { addBatch, COLUMNS, counts, newId, toCSV, toJSON, toTSV, useBank } from './db';
+import { COLUMNS, sendBatch, toCSV, toJSON, toTSV, useLoad, waitingCount } from './db';
 import { baseName, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from './format';
 import { Guide } from './Guide';
 import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon, RowsTable, SectionHeader, SendIcon, useUndo } from './ui';
@@ -21,7 +21,7 @@ function scrollToEl(el: HTMLElement | null) {
 }
 
 function Formatter() {
-  const [bank, setBank] = useBank();
+  const waiting = useLoad(waitingCount);
   const [raw, setRaw] = useState('');
   const [done, setDone] = useState('');
   const [caret, setCaret] = useState(0);
@@ -29,7 +29,9 @@ function Formatter() {
   const [batch, setBatch] = useState(0);
   const { offer, toast } = useUndo();
   const [teacher, setTeacher] = useState('');
-  const [sent, setSent] = useState<{ sent: number; noId: number; already: number } | null>(null);
+  const [sent, setSent] = useState<{ batchId: string | null; sent: number; noId: number; already: number } | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
   const [resultsInView, setResultsInView] = useState(true);
   /** The line being typed on in the Questions box, and the detail box being typed in: problems there wait until they move on. */
   const [typingLine, setTypingLine] = useState<number | null>(null);
@@ -106,11 +108,19 @@ function Formatter() {
 
   /** Sends the questions to the HoD as one batch. */
   const ready = rows.filter((r) => r.chapter_id).length;
-  const send = () => {
-    const { bank: next, ...result } = addBatch(bank, rows, teacher, new Date().toISOString(), newId);
-    setBank(next);
-    setSent(result);
-    if (result.sent) flash('send');
+  const send = async () => {
+    setSending(true);
+    setSent(null);
+    setSendError('');
+    try {
+      const result = await sendBatch(teacher, rows);
+      setSent(result);
+      if (result.sent) { flash('send'); waiting.reload(); }
+    } catch (e) {
+      setSendError((e as Error).message);
+    } finally {
+      setSending(false);
+    }
   };
 
   const prompt = `Open ${location.origin}/ and follow the instructions on that page to turn the material below into questions and answers.\n\nMaterial (my notes, my questions, or just the board, class, subject and chapter):\n`;
@@ -130,7 +140,7 @@ function Formatter() {
 
   return (
     <>
-      <SectionHeader here="formatter" waiting={counts(bank).pending}>
+      <SectionHeader here="formatter" waiting={waiting.data ?? 0}>
         <button type="button" className="top-link" onClick={() => scrollToEl(document.getElementById('guide'))}>How to write<span className="wide-only"> questions</span></button>
       </SectionHeader>
       <main className="page">
@@ -230,19 +240,20 @@ function Formatter() {
               <h3>3. Send for approval</h3>
               <p className="small muted">Your HoD checks the questions on the HoD desk. Only approved ones go into the question bank and the games.</p>
               <div className="row">
-                <input type="text" aria-label="Your name" placeholder="Your name" value={teacher} autoComplete="name" onChange={(e) => { setTeacher(e.target.value); setSent(null); }} />
-                <button type="submit" className={`btn dark${done === 'send' ? ' is-done' : ''}`} disabled={!ready || !teacher.trim()}>
-                  <ActionIcon done={done === 'send'}><SendIcon /></ActionIcon>{ready ? `Send ${plural(ready, 'question')}` : 'Send'}
+                <input type="text" aria-label="Your name" placeholder="Your name" value={teacher} autoComplete="name" onChange={(e) => { setTeacher(e.target.value); setSent(null); setSendError(''); }} />
+                <button type="submit" className={`btn dark${done === 'send' ? ' is-done' : ''}`} disabled={!ready || !teacher.trim() || sending}>
+                  <ActionIcon done={done === 'send'}><SendIcon /></ActionIcon>{sending ? 'Sending…' : ready ? `Send ${plural(ready, 'question')}` : 'Send'}
                 </button>
               </div>
               {rows.length > ready && <p className="small muted">{plural(rows.length - ready, 'question has', 'questions have')} no chapter ID and can't be sent yet. Fill in the boxes above.</p>}
               {sent && (
                 <p className={`sent-note ${sent.sent ? 'ok' : 'warn'}`} key={JSON.stringify(sent)}>
-                  {sent.sent ? <>Sent {plural(sent.sent, 'question')}. </> : 'Nothing new to send. '}
+                  {sent.sent ? <>Sent {plural(sent.sent, 'question')} to the HoD as batch <b>{sent.batchId}</b>. </> : 'Nothing new to send. '}
                   {sent.already > 0 && <>{plural(sent.already, 'question was', 'questions were')} already sent, so {sent.already === 1 ? 'it was' : 'they were'} skipped. </>}
-                  {sent.sent > 0 && <>This is a demo and nothing is saved, so they won't show up on the HoD desk. In Shikshaq they will.</>}
+                  {sent.sent > 0 && <a className="linkish" href="/hod/">Open the HoD desk</a>}
                 </p>
               )}
+              {sendError && <p className="sent-note warn" role="alert">Couldn't send: {sendError}</p>}
             </form>
           </section>
         </div>

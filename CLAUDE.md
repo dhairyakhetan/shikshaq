@@ -3,7 +3,7 @@
 This repo is for **Shikshaq** (shikshaq.in; its main code is `kushalsetha/Shikshaq`, a React + Vite + Supabase app). It has
 three separate parts. Each is its own page and works without the other two; they share only the question bank
 (`src/db.ts`) and a few things on screen (`src/ui.tsx`). In Shikshaq they will sit in different places (teachers, HoDs,
-students); here the header links them for the demo.
+students); here the header links them.
 
 1. **Question formatter** (`/`): teachers paste questions and answers in any format and get clean rows for the question
    bank, each linked to its chapter and topic by an ID. They download them or send them to the HoD. Chatbots that fetch
@@ -14,9 +14,8 @@ students); here the header links them for the demo.
    from the approved questions: crossword, word search, matching, fill in the blank. The puzzles are made on the device
    by the games engine (`src/games/`), with no AI, and every one is checked before it is shown.
 
-The questions will come from Shikshaq's database (see "The database" below). Until then each page starts from a sample
-bank in `src/db.ts` (CBSE Classes 9, 10 and 11; Science, Biology and Geography; 12 chapters, 166 questions) and nothing is
-saved: a reload starts again.
+All questions live in a Supabase database (see "The database" below); nothing is kept in the browser and there is no
+sample data. When the bank is empty, the pages say so.
 
 ## Commands
 
@@ -39,8 +38,8 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5. Deployed on Vercel from `main` 
 - **Questions and answers are never reworded** by any code. Only numbering, labels, bullets, Markdown and spaces are removed.
 - **Keep the chatbot instructions and the code in step.** `tests/instructions.test.ts` fails if they disagree; change
   `src/instructions.html` in the same commit as the rule.
-- **No browser storage.** No `localStorage` or `sessionStorage` anywhere. The demo starts from the sample every time; in
-  Shikshaq the database is the only place anything is saved.
+- **No browser storage and no sample data.** No `localStorage` or `sessionStorage` anywhere, and never put made-up
+  questions in the code or the database: the pages show only what is in the database.
 - **Write invisible characters as escapes** (`'​'`, `' '`), never as the raw character: tools can't match or
   edit them reliably.
 
@@ -54,10 +53,10 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5. Deployed on Vercel from `main` 
 | `hod/index.html`, `play/index.html` | The shells of the HoD desk and Revise pages. |
 | `vite.config.ts` | Vite + React. Three pages (`appType: 'mpa'`, one build input each). The `bake-instructions` plugin replaces `<!--INSTRUCTIONS-->` in `index.html` with `src/instructions.html`. Also the vitest config. |
 | `src/instructions.html` | Instructions for AI assistants: how to get the material, work out board/class/subject/chapter/topics, write short-answer questions, and reply in the exact format the formatter reads. Has `<pre id="format">` and `<pre id="example">`, which the tests parse. |
-| `src/formatter.tsx` | The formatter page. The text (the single source of truth; not saved), the cursor line, which detail box is being typed in, undo, button feedback. Runs `format()`, decides which problems to show (`visibleIssues`), builds the notes, and handles download, copy, "Send for approval" (in the demo the batch only lives on this page, and the note says so), smooth scrolling and the phone "jump to results" pill. Also `Editor`, the Questions box: a transparent textarea over an exact copy of its text that carries the red/amber underlines; the copy is kept to the same width and scroll, and the note under it explains the line the cursor is on. |
+| `src/formatter.tsx` | The formatter page. The text (the single source of truth; not saved), the cursor line, which detail box is being typed in, undo, button feedback. Runs `format()`, decides which problems to show (`visibleIssues`), builds the notes, and handles download, copy, "Send for approval" (`sendBatch`; the note shows the new batch ID), smooth scrolling and the phone "jump to results" pill. Also `Editor`, the Questions box: a transparent textarea over an exact copy of its text that carries the red/amber underlines; the copy is kept to the same width and scroll, and the note under it explains the line the cursor is on. |
 | `src/Guide.tsx` | "How to write your questions", the guide for people at the bottom of the formatter. Board and subject code lists and limits come from the code, so they can't drift. Cards fade in as they scroll into view. |
-| `src/hod.tsx` | The HoD desk. Tabs Waiting / Approved / Sent back, batches grouped by chapter and topic, approve or send back per question or per batch, the reason box, rows sliding away, undo for every action, "Start the demo again" when nothing is waiting, download of the approved bank. |
-| `src/play.tsx` | Revise. Groups approved questions into chapters and topics (`chaptersOf`, ordered by class, subject, chapter), Class and Subject pills, chapter cards (number, name, topics, questions) and topic chips, makes every game the chosen topics allow (only checked puzzles; a game that can't be made is greyed out), "New puzzle" (a new seed). |
+| `src/hod.tsx` | The HoD desk. Asks for the HoD passcode first (kept in memory only, so it is asked each visit), then loads every question (`loadForHod`). Tabs Waiting / Approved / Sent back, batches grouped by chapter and topic, approve or send back per question or per batch, the reason box, rows sliding away, every change saved at once (`saveStatus`) and undoable for a few seconds, "Check for new questions" when nothing is waiting, download of the approved bank. |
+| `src/play.tsx` | Revise. Loads the `question_bank` table (`loadQuestionBank`; says so when it is empty or can't be reached), groups the questions into chapters and topics (`chaptersOf`, ordered by class, subject, chapter), Class and Subject pills, chapter cards (number, name, topics, questions) and topic chips, makes every game the chosen topics allow (only checked puzzles; a game that can't be made is greyed out), "New puzzle" (a new seed). |
 | `src/playgames.tsx` | The four games, playable. Matching: tap a question, then its answer (either side first). Fill in the blank: type in the gap, Enter; "Show answer" after 2 wrong tries. Word search: drag across a word, or tap its first and last letter. Crossword: tap a square and type (a hidden input catches keys and phone keyboards), Backspace, arrows, Enter for the next clue, tap again to switch across/down, Check, Reveal word. Each ends with a "Next puzzle" banner. |
 | `src/ui.tsx` | What the three pages share on screen: `SectionHeader` (the header with links to the three parts and the number waiting), `RowsTable` (rows grouped by chapter and topic with their IDs; rows slide in; optional buttons under each row), `useUndo` (the "Undo" bar), the icons (`ActionIcon` swaps an icon for a check mark without resizing the button) and `Logo`. |
 | `src/styles.css` | All styling, for all three pages, in Shikshaq's look (taken from its `tailwind.config.ts` and `src/index.css`): warm cream page, bone cards with a soft shadow instead of a border, near-black pill buttons, orange and indigo accents, Geist / Geist Mono / Archivo (bundled, imported at the top). Colours are Shikshaq's values, as variables on `:root`. Hover only applies where there is a mouse. The motion section at the end uses Shikshaq's curve and timings; only success moments pop; only transform and opacity animate; "reduce motion" turns sliding, scaling and shaking off (`--rise`, `--press`, `--pop`, `--reveal` become 0/1). |
@@ -68,7 +67,8 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5. Deployed on Vercel from `main` 
 
 | File | What it does |
 | --- | --- |
-| `src/db.ts` | The only thing the three parts share, and the only file to change when the bank moves to Shikshaq's database. The row (`Row`, `COLUMNS`, `DIFFICULTIES`) and its exports (`toCSV` with no byte-order mark, `toJSON`, `toTSV`). The bank: `Batch`, `BankQuestion` (a row plus `status` pending/approved/rejected and the HoD's `note`), `addBatch` (a teacher's batch, skipping questions with no chapter ID or already waiting/approved), `setStatus` (approve, send back with a reason, move back to waiting), `counts`. `useBank` holds it in memory, starting from `SAMPLE_BANK`; this is what the database replaces. `SAMPLE_BANK` is built from `DEMO`: 12 CBSE chapters, each one teacher's batch (9 approved, with 2 questions sent back; 3 waiting), so every class and subject has 2 or 3 chapters to pick from. |
+| `src/db.ts` | The only thing the three parts share. The row (`Row`, `COLUMNS`, `DIFFICULTIES`) and its exports (`toCSV` with no byte-order mark, `toJSON`, `toTSV`). The bank's shapes (`Batch`, `BankQuestion`: a row plus its question ID, batch ID, `status` pending/approved/rejected and the HoD's `note`), `setStatus` and `counts` for the page's own copy. Then the database calls, plain `fetch` to Supabase with the publishable key: `loadQuestionBank`, `waitingCount`, `sendBatch`, `loadForHod`, `saveStatus`, and `useLoad` (load when the page opens). |
+| `supabase/schema.sql` | The whole database: tables, IDs, the trigger that keeps `question_bank` in step, the security rules and the four functions the pages call. Already applied to the project. |
 
 ### Formatter logic
 
@@ -95,9 +95,9 @@ it. The rules are explained for people in `docs/games.md`.
 
 | File | What it checks |
 | --- | --- |
-| `tests/formatter.test.ts` | `format()`: every input shape, wording kept, detail lines and tables, topic numbering, IDs, every kind of problem and its level, `visibleIssues`, output round-trips (its own CSV and TSV read back unchanged). `details.ts`: capitalising, boards, classes, subjects, codes, the four boxes (every keystroke round-trips). `db.ts`: sending batches, no duplicates, approving, sending back, resending; the sample bank is exactly what the formatter makes from the same questions (IDs, numbering, capitals, no warnings). |
+| `tests/formatter.test.ts` | `format()`: every input shape, wording kept, detail lines and tables, topic numbering, IDs, every kind of problem and its level, `visibleIssues`, output round-trips (its own CSV and TSV read back unchanged). `details.ts`: capitalising, boards, classes, subjects, codes, the four boxes (every keystroke round-trips). `db.ts`: approving, sending back and moving back to waiting on the page's copy (undo relies on the original being untouched). Duplicates, numbering and IDs are the database's job (`supabase/schema.sql`). |
 | `tests/instructions.test.ts` | The chatbot instructions agree with the code (columns, IDs, boards, limits, difficulty words, page labels); the template, worked example and the guide's example parse with no warnings; the hide-from-people setup in `index.html` and the build plugin. |
-| `tests/games.test.ts` | Each game on real questions; every approved sample chapter makes all four games and every topic makes a puzzle; determinism; fallbacks; and **every checker is shown deliberately broken puzzles and must catch each one**, which is what makes the stress results mean something. |
+| `tests/games.test.ts` | Each game on real questions; determinism; fallbacks; and **every checker is shown deliberately broken puzzles and must catch each one**, which is what makes the stress results mean something. |
 | `tests/games-stress.test.ts` | Ordinary and nasty question sets (words inside words, A/B-only words, palindromes, long answers, digits and Hindi, duplicates and blanks) through every game, with a report table. `STRESS=n` sets the number of sets per kind (default 40; `npm run stress` uses 2,500). |
 
 ### Other
@@ -108,68 +108,38 @@ it. The rules are explained for people in `docs/games.md`.
 | `docs/games.md` | For Krish and the team: the rules of each game, the guarantee, the stress results, and decisions still to make. |
 | `package.json`, `tsconfig.json`, `.gitignore` | The usual. `tsconfig` is strict with `noUnusedLocals`. |
 
-## The database (where the questions will come from)
+## The database
 
-In Shikshaq every question is read from and written to its Supabase database. Nothing here talks to it yet: `src/db.ts`
-holds the shapes, the rules (`addBatch`, `setStatus`) and the sample. Kanishk sets up the tables. When connecting:
+Supabase project "dhairyakhetan's Project" (`dfytzracuyiitlqeqszm`). Everything is in `supabase/schema.sql`, already
+applied. Change the database only by editing that file and running the change in the Supabase SQL editor.
 
-**Tables.** Names are suggestions. Shikshaq already has `bank_questions`, for past papers; that is a different thing, so
-don't reuse it. The columns are `COLUMNS` plus the review fields.
+**Tables:**
+- `batches`: one row per "Send for approval": `batch_id`, `teacher`, `sent_at`.
+- `questions`: every question ever sent, with `status` pending (waiting), approved or rejected (sent back) and the HoD's
+  `note`. A question already waiting or approved in the same chapter can't be added again.
+- `question_bank`: the clean final table, approved questions only, one row per question with a described column each.
+  A trigger keeps it in step with `questions`; nothing else writes to it. This is the table to use elsewhere.
 
-```sql
-create table question_batches (
-  id uuid primary key default gen_random_uuid(),
-  teacher_id uuid not null references auth.users (id),
-  teacher_name text not null,
-  created_at timestamptz not null default now()
-);
-create table revision_questions (
-  id uuid primary key default gen_random_uuid(),
-  batch_id uuid not null references question_batches (id) on delete cascade,
-  chapter_id text not null,                 -- CBSE10SCI01 (made by the formatter, never typed)
-  topic_id text,                            -- CBSE10SCI01T02
-  board text not null, class int not null, subject text not null,
-  chapter_no int not null, chapter text not null, topic_no int, topic text not null default '',
-  question_no int not null, question text not null, answer text not null,
-  difficulty text check (difficulty in ('easy', 'medium', 'hard')),
-  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
-  note text not null default '',            -- the HoD's reason when a question is sent back
-  reviewed_at timestamptz, reviewed_by uuid references auth.users (id),
-  created_at timestamptz not null default now()
-);
--- a question can't wait or be approved twice in one chapter (addBatch checks this too)
-create unique index on revision_questions (chapter_id, lower(question)) where status <> 'rejected';
-create index on revision_questions (status, class, subject, chapter_id);
--- who counts as an HoD: Kanishk decides; a table like Shikshaq's `admins` is one way
-create table hods (user_id uuid primary key references auth.users (id), created_at timestamptz not null default now());
-```
+**IDs say what they are:**
+- Question: `CBSE10SCI01T02Q003` = chapter ID `CBSE10SCI01` + topic `T02` + question `Q003` of that topic (`T00` = no
+  topic). The database numbers questions in order within each topic and never reuses a number.
+- Batch: `B20261009-03` = the 3rd batch sent on 9 October 2026 (India time).
 
-**Who can do what** (row-level security, so the rules hold even if the page is bypassed):
-- Teachers: add a batch and its questions as themselves, always with status `pending`; read their own questions, to see
-  what was sent back and why.
-- HoDs: read everything; change only `status`, `note`, `reviewed_at`, `reviewed_by`.
-- Students and everyone else: read questions with status `approved`, nothing else.
+**Who can do what.** Row-level security is on. The pages use the publishable key, which can only read `question_bank` and
+call four functions:
+- `submit_batch(teacher, questions)` (formatter): adds a batch as waiting, skips duplicates, gives the IDs.
+- `waiting_count()`: the number in the header.
+- `hod_questions(passcode)` and `hod_set_status(passcode, ids, new_status, reason)` (HoD desk): need the HoD passcode.
 
-**What each part reads and writes:**
+`batches` and `questions` can't be read or written directly with that key. The HoD passcode is stored only as a hash in
+`private.settings` (not reachable from the API) and is not in this repo. To change it, run in the SQL editor:
+`update private.settings set value = extensions.crypt('new passcode', extensions.gen_salt('bf', 8)) where key = 'hod_passcode';`
 
-| Part | Reads | Writes |
-| --- | --- | --- |
-| Formatter | approved and waiting questions of the chapters being sent (to skip duplicates) | one `question_batches` row and its `revision_questions`, status `pending` (what `addBatch` does) |
-| HoD desk | all questions, with their batch's teacher and date | `status`, `note`, `reviewed_at`, `reviewed_by` (what `setStatus` does); undo writes the old values back |
-| Revise | approved questions of the chosen class and subject: `id, chapter_id, topic_id, class, subject, chapter_no, chapter, topic_no, topic, question, answer` | nothing |
-
-**Code to change:**
-1. Replace `useBank` in `src/db.ts` with reads and writes to these tables (one small hook per part is fine). Field names
-   map as `batch` → `batch_id`, `reviewedAt` → `reviewed_at`; `line` is not stored.
-2. Keep `addBatch` and `setStatus` as the rules the pages follow; the unique index and the security rules enforce them
-   again on the server.
-3. Delete `DEMO` and `SAMPLE_BANK`, the "Demo:" notes on the three pages, and the demo sentence in the formatter's
-   "Sent" note. Update the tests that use the sample.
-4. Puzzles are never stored: Revise makes them on the device from the approved questions, every time.
+The project also has three old, empty tables (`chapters`, `games`, `game_questions`) from an earlier design where the HoD
+approved games. Nothing uses them.
 
 ## Where this is going
 
-Done: the formatter, the HoD desk, the games engine (rules, makers, checkers, stress proof), and Revise (topic picker and
-the four playable games). Next: (7) test with real chapters made with the formatter → (8) into `kushalsetha/Shikshaq` as
-a pull request: the questions and batches tables behind the HoD desk (Kanishk sets up the tables and who counts as an
-HoD), the three parts in their places, behind login, styled like Shikshaq. Never push to their repo without the user's OK.
+Done: the three pages on a real database. Next: logins (teachers, HoDs, students) in place of the passcode, a place for
+teachers to see what was sent back and why, and moving the pages into `kushalsetha/Shikshaq`. Never push to their repo
+without the user's OK.

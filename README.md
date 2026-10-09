@@ -8,10 +8,9 @@ Three separate parts, each its own page. They work without each other and share 
 | `/hod/` **HoD desk** | The HoD | Approve questions or send them back with a reason. Approved questions are the question bank. |
 | `/play/` **Revise** | Students | Pick the topics you studied and play a crossword, word search, matching or fill-in-the-blank puzzle made from them. |
 
-The questions will come from Shikshaq's database. For now there is no database and nothing is saved, not even in the
-browser: each page starts from a sample question bank in `src/db.ts` (CBSE Classes 9, 10 and 11; Science, Biology and
-Geography; 12 chapters, 166 questions, some approved, some waiting, two sent back), and a reload starts again.
-[CLAUDE.md](CLAUDE.md) says how the database will plug in.
+All questions live in a Supabase database: every question sent, waiting, approved or sent back, and a clean
+`question_bank` table of the approved ones. The tables, rules and functions are in `supabase/schema.sql`. Nothing is kept
+in the browser, and there is no sample data: when the bank is empty, the pages say so. The HoD desk needs the HoD passcode.
 
 The pages use Shikshaq's look (its colours, fonts, pill buttons, shadows and motion timings), so they can move into the
 main site without looking out of place.
@@ -73,9 +72,9 @@ The lists live in `src/details.ts`.
 Teachers press **Send for approval** (with their name) on the formatter. On the HoD desk the HoD sees each batch,
 grouped by chapter and topic, and approves questions or sends them back with a reason the teacher sees, one by one or the
 whole batch; every action can be undone. **Approved** is the question bank the games use, and downloads as CSV or JSON.
-A question with no chapter ID can't be sent, and one already waiting or approved isn't sent twice. For now this is a demo
-with sample batches from three teachers, and nothing is saved; in Shikshaq only HoDs will see it and every approval will
-be saved in the database.
+A question with no chapter ID can't be sent, and one already waiting or approved isn't sent twice. Each question gets an
+ID that says what it is, such as `CBSE10SCI01T02Q003` (chapter, topic 2, question 3), and each batch one such as
+`B20261009-03` (the 3rd batch sent that day). The HoD desk opens with the HoD passcode, which isn't saved.
 
 ## Revise (`/play/`)
 

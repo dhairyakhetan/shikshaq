@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { enumeration, gridWord, rng, sameAnswer, type Item } from '../src/games/shared';
 import { checkCrossword, makeCrossword, type Crossword } from '../src/games/crossword';
 import { checkFill, type FillIn } from '../src/games/fill';
-import { SAMPLE_BANK } from '../src/db';
 import { checkGame, makeGame, makePuzzle, seedOf } from '../src/games';
 import { checkMatching, makeMatching, type Matching } from '../src/games/matching';
 import { checkWordSearch, makeWordSearch, occurrences, type WordSearch } from '../src/games/wordsearch';
@@ -123,23 +122,6 @@ describe('making games from real questions', () => {
     expect(makePuzzle(items([['Only one?', 'Yes']]), 1)?.type).toBe('fill');
     expect(makePuzzle([], 1)).toBeNull();
     expect(makePuzzle(CHEM, 1, ['wordsearch', 'crossword'])?.type).toBe('wordsearch');
-  });
-});
-
-describe('the demo question bank (what the Revise page shows)', () => {
-  const approved = SAMPLE_BANK.questions.filter((q) => q.status === 'approved');
-  const chapters = [...new Set(approved.map((q) => q.chapter_id))];
-
-  it('makes every game for every whole chapter, and a puzzle for every single topic', () => {
-    expect(chapters.length).toBe(9);
-    for (const ch of chapters) {
-      const qs = approved.filter((q) => q.chapter_id === ch);
-      const all = qs.map((q) => ({ id: q.id, question: q.question, answer: q.answer }));
-      for (const type of ['crossword', 'wordsearch', 'matching', 'fill'] as const) expect(makeGame(type, all, seedOf(`${ch}`)), `${ch} ${type}`).not.toBeNull();
-      for (const t of new Set(qs.map((q) => q.topic_id))) {
-        expect(makePuzzle(all.filter((_, i) => qs[i].topic_id === t), seedOf(`${t}`)), `${t}`).not.toBeNull();
-      }
-    }
   });
 });
 
