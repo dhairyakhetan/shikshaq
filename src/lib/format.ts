@@ -1,6 +1,6 @@
 /**
  * Turns questions and answers pasted in almost any shape into flat rows for a database:
- * one row per question, tagged with board, class, subject, chapter and topic.
+ * one row per question, tagged with board, class, subject, chapter and topic, and linked to its chapter and topic by ID.
  *
  * Accepted shapes, mixed freely: "Question | Answer" lines (an optional third part is the difficulty),
  * tab-separated cells copied from a spreadsheet, Markdown tables, CSV with a header row,
@@ -8,9 +8,15 @@
  * and "question? answer", "question = answer" or "question - answer".
  * Lines such as "Chapter 1: Acids" or "Topic 2: Indicators" set the details for the questions below them.
  *
- * The wording is never changed. Only numbering, labels, bullets, Markdown markers and extra spaces are removed.
- * Every line that can't be used is reported with its line number.
+ * Questions and answers are never reworded: only numbering, labels, bullets, Markdown markers and extra spaces go.
+ * Names of boards, subjects, chapters and topics are written the standard way (CBSE, Chemistry, "Acids, Bases and Salts").
+ * Every problem is reported with its line number: an error means the line was left out, a warning means "check this".
  */
+import {
+  boardClassProblem, chapterId, checkBoard, checkClass, checkNumbered, checkSubject, parseNumbered, plainLine, readMeta, topicId,
+  type Level, type MetaKey,
+} from './details';
+import { tidy, titleCase } from './text';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
@@ -18,13 +24,15 @@ export const MAX_QUESTION = 300;
 export const MAX_ANSWER = 100;
 
 /** The columns of a row, in order. These are the column names of the CSV and the keys of the JSON. */
-export const COLUMNS = ['board', 'class', 'subject', 'chapter_no', 'chapter', 'topic_no', 'topic', 'question_no', 'question', 'answer', 'difficulty'] as const;
-
-export interface Details { board: string; class: string; subject: string; chapter: string }
+export const COLUMNS = ['chapter_id', 'topic_id', 'board', 'class', 'subject', 'chapter_no', 'chapter', 'topic_no', 'topic', 'question_no', 'question', 'answer', 'difficulty'] as const;
 
 export interface Row {
+  /** Board code + class + subject code + chapter number, such as CBSE10SCI01. Null until all four are known. */
+  chapter_id: string | null;
+  /** Chapter ID + "T" + topic number, such as CBSE10SCI01T02. */
+  topic_id: string | null;
   board: string;
-  class: string;
+  class: number | null;
   subject: string;
   chapter_no: number | null;
   chapter: string;
@@ -39,17 +47,21 @@ export interface Row {
   line: number;
 }
 
-export interface Issue { line: number; text: string }
+export interface Issue { line: number; level: Level; text: string }
 export interface Formatted { rows: Row[]; issues: Issue[] }
 
 interface Context {
-  board: string; class: string; subject: string;
+  board: string; boardCode: string | null;
+  class: number | null;
+  subject: string; subjectCode: string | null;
   chapter_no: number | null; chapter: string;
   topic_no: number | null; topic: string;
   difficulty: Difficulty | null;
+  /** Lines that set the board, chapter and topic, for pointing at them in warnings. */
+  boardLine: number; chapterLine: number; topicLine: number;
 }
 
-type Field = keyof Context | 'question' | 'answer' | 'skip';
+type Field = 'board' | 'class' | 'subject' | 'chapter' | 'chapter_no' | 'topic' | 'topic_no' | 'difficulty' | 'question' | 'answer' | 'skip';
 
 const DIFF: Record<string, Difficulty> = {
   easy: 'easy', e: 'easy', '1': 'easy', low: 'easy', simple: 'easy', basic: 'easy',
@@ -72,68 +84,16 @@ const HEADERS: Record<string, Field> = {
   topic: 'topic', 'topic name': 'topic', 'topic no': 'topic_no', 'topic number': 'topic_no',
   difficulty: 'difficulty', level: 'difficulty',
   '#': 'skip', no: 'skip', 'sl no': 'skip', 's no': 'skip', sr: 'skip', 'sr no': 'skip', 'question no': 'skip', 'q no': 'skip',
+  'chapter id': 'skip', 'topic id': 'skip', id: 'skip',
 };
 const headerField = (cell: string): Field | undefined => HEADERS[tidy(cell).toLowerCase().replace(/[_.\s]+/g, ' ').trim()];
-
-/** Collapses spaces and removes Markdown wrappers and quotes around the whole text. Never touches the words. */
-export function tidy(s: string): string {
-  let t = s.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
-  for (;;) {
-    const m = t.match(/^(__|`|"|“)(.+)(__|`|"|”)$/);
-    if (!m || (m[1] === '“' ? '”' : m[1]) !== m[3]) return t;
-    t = m[2].trim();
-  }
-}
 
 const BULLET = /^[-*•▪◦·]\s+/;
 const NUMBER = /^(?:\(\d{1,3}\)|\[\d{1,3}\]|\d{1,3}[.):\]]|\d{1,3}\s+[-–])\s+/;
 const QPREFIX = /^q(?:ues(?:tion)?)?\s*(?:\.?\s*\d{1,3}\s*[.):\-–]?|[.):\-–])\s*/i;
 const APREFIX = /^(?:ans(?:wer)?\s*(?:\.?\s*\d{1,3}\s*[.):\-–]?|[.):\-–])\s*|a\s*[.):\-–]\s+)/i;
 const INLINE_ANS = /^(.*?\S)\s+(?:ans(?:wer)?\s*(?:[.):\-–—]\s*)|→|->|=>)\s*(.+)$/i;
-const META = /^(board|class|grade|std|standard|subject|chapter|ch|lesson|topic|sub-?topic|section|difficulty|level)\b\.?\s*(.*)$/i;
-
-type Meta =
-  | { kind: 'chapter' | 'topic'; no: number | null; name: string }
-  | { kind: 'board' | 'class' | 'subject'; value: string }
-  | { kind: 'difficulty'; value: string };
-
-const lastInt = (s: string) => Number(s.split('.').pop());
-
-/** "10", "10th", "Class 10" → "10". Roman numerals and other values are kept as written. */
-export function normClass(s: string): string {
-  return tidy(s).replace(/^(?:class|grade|std\.?|standard)\s*[:\-–]?\s*/i, '').replace(/^(\d+)(?:st|nd|rd|th)$/i, '$1');
-}
-
-/** "Chapter 10: Light", "10. Light", "Light" or "10" → number and name. */
-export function parseChapter(s: string): { no: number | null; name: string } {
-  const t = tidy(s).replace(/^(?:chapter|ch|lesson)\b\.?\s*/i, '');
-  const m = t.match(/^(\d+(?:\.\d+)*)(?:\s*[:\-–—.)]\s*|\s+|$)(.*)$/);
-  return m ? { no: lastInt(m[1]), name: tidy(m[2]) } : { no: null, name: t };
-}
-
-function readMeta(s: string): Meta | null {
-  const m = s.match(META);
-  if (!m) return null;
-  const key = m[1].toLowerCase();
-  const rest = m[2];
-  if (['chapter', 'ch', 'lesson', 'topic', 'subtopic', 'sub-topic', 'section'].includes(key)) {
-    const r = rest.match(/^(\d+(?:\.\d+)*)?\s*([:\-–—.)]\s*)?(.*)$/)!;
-    if (!r[1] && !r[2]) return null; // "Section of a cell ..." is a sentence, not a heading
-    const name = tidy(r[3]);
-    if (!name && !r[1]) return null;
-    return { kind: ['chapter', 'ch', 'lesson'].includes(key) ? 'chapter' : 'topic', no: r[1] ? lastInt(r[1]) : null, name };
-  }
-  if (['class', 'grade', 'std', 'standard'].includes(key)) {
-    const r = rest.match(/^([:\-–—]\s*)?(.+)$/);
-    if (!r) return null;
-    if (!r[1] && !/^[\divxlc]+(?:st|nd|rd|th)?$/i.test(r[2].trim())) return null; // "Class 10" yes, "Class of compounds" no
-    return { kind: 'class', value: normClass(r[2]) };
-  }
-  const r = rest.match(/^[:\-–—]\s*(.+)$/);
-  if (!r) return null;
-  if (key === 'difficulty' || key === 'level') return { kind: 'difficulty', value: r[1] };
-  return { kind: key as 'board' | 'subject', value: tidy(r[1]) };
-}
+const NAMES: Record<MetaKey, string> = { board: 'Board', class: 'Class', subject: 'Subject', chapter: 'Chapter', topic: 'Topic', difficulty: 'Difficulty' };
 
 /** Removes bullets, numbering and a "Q." label. */
 function stripLead(s: string): { body: string; hadQ: boolean } {
@@ -188,59 +148,110 @@ function cellsOf(line: string, delim: string): string[] {
 }
 
 const DEFAULT_FIELDS: Field[] = ['question', 'answer', 'difficulty'];
+const CANNOT_READ = 'Couldn\'t find a question and an answer. Put " | " between them.';
 
-export function format(raw: string, details: Details): Formatted {
+export function format(raw: string): Formatted {
   const rows: Row[] = [];
   const issues: Issue[] = [];
-  const base = parseChapter(details.chapter);
   const ctx: Context = {
-    board: tidy(details.board), class: normClass(details.class), subject: tidy(details.subject),
-    chapter_no: base.no, chapter: base.name, topic_no: null, topic: '', difficulty: null,
+    board: '', boardCode: null, class: null, subject: '', subjectCode: null,
+    chapter_no: null, chapter: '', topic_no: null, topic: '', difficulty: null, boardLine: 0, chapterLine: 0, topicLine: 0,
   };
-  const topicNos = new Map<string, number>();
+  const topicNos = new Map<string, number>(); // chapter + topic name → number, for topics written without one
   const topicMax = new Map<string, number>();
   const counts = new Map<string, number>();
   const seen = new Map<string, number>();
+  const names = new Map<string, { name: string; line: number }>(); // chapter or topic ID → the name it was first given
+  const once = new Set<string>();
   const headers: Record<string, Field[]> = {};
+  const lastSet: Partial<Record<MetaKey, { line: number; used: boolean }>> = {};
   let pending: { q: string; line: number } | null = null;
 
-  const issue = (line: number, text: string) => { issues.push({ line, text }); };
+  const issue = (line: number, level: Level, text: string) => { issues.push({ line, level, text }); };
+  const warnOnce = (id: string, line: number, text: string, level: Level = 'warn') => {
+    if (once.has(id)) return;
+    once.add(id);
+    issue(line, level, text);
+  };
   const dropPending = () => {
-    if (pending) issue(pending.line, 'This question has no answer.');
+    if (pending) issue(pending.line, 'error', 'This question has no answer.');
     pending = null;
+  };
+
+  /**
+   * Checks a board, class, subject, chapter or topic and returns what to store. A detail line reports its own problem;
+   * a table column reports each distinct wrong value once (the key), not on every row.
+   */
+  const board = (v: string, line: number, key = String(line)) => {
+    const b = checkBoard(v);
+    if (b.problem) warnOnce(`board\u0000${key}`, line, b.problem.text, b.problem.level);
+    return { board: b.name, boardCode: b.code };
+  };
+  const klass = (v: string, line: number, key = String(line)) => {
+    const c = checkClass(v);
+    if (c.problem) warnOnce(`class\u0000${key}`, line, c.problem.text, c.problem.level);
+    return c.value;
+  };
+  const subject = (v: string, line: number, key = String(line)) => {
+    const s = checkSubject(v);
+    if (s.problem) warnOnce(`subject\u0000${key}`, line, s.problem.text, s.problem.level);
+    return { subject: s.name, subjectCode: s.code };
+  };
+  const numbered = (kind: 'chapter' | 'topic', v: string, line: number, key = String(line)) => {
+    const p = parseNumbered(v, kind);
+    const problem = checkNumbered(kind, p.no, p.name);
+    if (problem) warnOnce(`${kind}\u0000${key}`, line, problem.text, problem.level);
+    return { no: problem?.level === 'error' && p.no !== null && (p.no < 1 || p.no > 99) ? null : p.no, name: titleCase(p.name) };
   };
 
   const add = (line: number, q0: string, a0: string, over: Partial<Context> = {}) => {
     const q = tidy(q0);
     const a = tidy(a0);
-    if (!q || !a) return issue(line, `The ${q ? 'answer' : 'question'} is empty.`);
-    if (q.length > MAX_QUESTION) return issue(line, `The question is longer than ${MAX_QUESTION} characters.`);
-    if (a.length > MAX_ANSWER) return issue(line, `The answer is longer than ${MAX_ANSWER} characters. Puzzles need short answers.`);
+    if (!q || !a) return issue(line, 'error', `The ${q ? 'answer' : 'question'} is empty.`);
+    if (q.length > MAX_QUESTION) return issue(line, 'error', `The question is longer than ${MAX_QUESTION} characters.`);
+    if (a.length > MAX_ANSWER) return issue(line, 'error', `The answer is longer than ${MAX_ANSWER} characters. Puzzles need short answers.`);
     const c = { ...ctx, ...over };
-    const chapterKey = [c.board, c.class, c.subject, c.chapter_no, c.chapter].join('\u0000').toLowerCase();
+    const cid = chapterId(c.boardCode, c.class, c.subjectCode, c.chapter_no);
+    const chapterKey = cid ?? [c.board, c.class, c.subject, c.chapter_no, c.chapter].join('\u0000').toLowerCase();
     const dupKey = `${chapterKey}\u0001${q.toLowerCase()}`;
     const earlier = seen.get(dupKey);
-    if (earlier) return issue(line, `Same question as line ${earlier}, skipped.`);
+    if (earlier) return issue(line, 'error', `Same question as line ${earlier}, skipped.`);
     seen.set(dupKey, line);
+    for (const k of Object.keys(lastSet) as MetaKey[]) lastSet[k]!.used = true;
 
     let topicNo = c.topic_no;
-    const topicKey = `${chapterKey}\u0001${c.topic ? c.topic.toLowerCase() : `#${topicNo ?? ''}`}`;
-    if (c.topic || topicNo !== null) {
-      topicNo ??= topicNos.get(topicKey) ?? (topicMax.get(chapterKey) ?? 0) + 1;
-      topicNos.set(topicKey, topicNo);
-      topicMax.set(chapterKey, Math.max(topicMax.get(chapterKey) ?? 0, topicNo));
+    if (topicNo === null && c.topic) {
+      const nameKey = `${chapterKey}\u0001${c.topic.toLowerCase()}`;
+      topicNo = topicNos.get(nameKey) ?? (topicMax.get(chapterKey) ?? 0) + 1;
+      topicNos.set(nameKey, topicNo);
     }
-    const n = (counts.get(topicKey) ?? 0) + 1;
-    counts.set(topicKey, n);
+    if (topicNo !== null) topicMax.set(chapterKey, Math.max(topicMax.get(chapterKey) ?? 0, topicNo));
+    const tid = topicId(cid, topicNo);
+
+    // the same ID must not mean two different chapters or topics
+    for (const [id, name, at, what] of [[cid, c.chapter, c.chapterLine || line, 'Chapter'], [tid, c.topic, c.topicLine || line, 'Topic']] as const) {
+      if (!id || !name) continue;
+      const first = names.get(id);
+      if (!first) names.set(id, { name, line: at });
+      else if (first.name.toLowerCase() !== name.toLowerCase()) {
+        warnOnce(`name\u0000${id}\u0000${name}`, at, `${what} ID ${id} is already "${first.name}" (line ${first.line}). Check the ${what.toLowerCase()} number.`);
+      }
+    }
+    const bc = boardClassProblem(c.boardCode, c.class);
+    if (bc) warnOnce(`bc\u0000${c.boardCode}\u0000${c.class}`, c.boardLine || line, bc);
+
+    const countKey = `${chapterKey}\u0001${topicNo ?? ''}`;
+    const n = (counts.get(countKey) ?? 0) + 1;
+    counts.set(countKey, n);
     rows.push({
-      board: c.board, class: c.class, subject: c.subject, chapter_no: c.chapter_no, chapter: c.chapter,
+      chapter_id: cid, topic_id: tid, board: c.board, class: c.class, subject: c.subject, chapter_no: c.chapter_no, chapter: c.chapter,
       topic_no: topicNo, topic: c.topic, question_no: n, question: q, answer: a, difficulty: c.difficulty, line,
     });
   };
 
   const fromCells = (line: number, cells: string[], fields: Field[]) => {
     const extra = cells.slice(fields.length).filter((c) => c.trim());
-    if (extra.length) return issue(line, 'This line has more parts than expected. Add a header row such as "Topic | Question | Answer".');
+    if (extra.length) return issue(line, 'error', 'This line has more parts than expected. Add a header row such as "Topic | Question | Answer".');
     const over: Partial<Context> = {};
     let q = '';
     let a = '';
@@ -251,21 +262,49 @@ export function format(raw: string, details: Details): Formatted {
       else if (f === 'answer') a = v;
       else if (f === 'difficulty') {
         const d = toDifficulty(v);
-        if (d === undefined) issue(line, `"${tidy(v)}" is not easy, medium or hard, so no difficulty was set.`);
+        if (d === undefined) issue(line, 'warn', `"${tidy(v)}" is not easy, medium or hard, so no difficulty was set.`);
         else over.difficulty = d;
-      } else if (f === 'chapter') {
-        const ch = parseChapter(v);
-        over.chapter = ch.name;
-        if (ch.no !== null) over.chapter_no = ch.no;
-      } else if (f === 'chapter_no' || f === 'topic_no') {
+      } else if (f === 'board') Object.assign(over, board(v, line, v), { boardLine: line });
+      else if (f === 'class') over.class = klass(v, line, v);
+      else if (f === 'subject') Object.assign(over, subject(v, line, v));
+      else if (f === 'chapter' || f === 'topic') {
+        const p = numbered(f, v, line, v);
+        if (f === 'chapter') { over.chapter = p.name; over.chapterLine = line; if (p.no !== null) over.chapter_no = p.no; }
+        else { over.topic = p.name; over.topic_no = p.no; over.topicLine = line; }
+      } else {
         const no = parseInt(v, 10);
-        if (Number.isFinite(no)) over[f] = no;
-      } else if (f === 'class') over.class = normClass(v);
-      else over[f] = tidy(v);
+        if (Number.isFinite(no) && no >= 1 && no <= 99) over[f] = no;
+        else warnOnce(`${f}\u0000${v}`, line, `"${tidy(v)}" is not a ${f === 'chapter_no' ? 'chapter' : 'topic'} number from 1 to 99.`);
+      }
     });
-    if ('chapter' in over && !('topic' in over)) { over.topic = ''; over.topic_no = null; }
+    if (('chapter' in over || 'chapter_no' in over) && !('topic' in over) && !('topic_no' in over)) { over.topic = ''; over.topic_no = null; }
     if ('topic' in over && !('topic_no' in over)) over.topic_no = null;
     add(line, q, a, over);
+  };
+
+  const setMeta = (key: MetaKey, value: string, line: number) => {
+    const prev = lastSet[key];
+    if (prev && !prev.used) {
+      issue(prev.line, 'warn', key === 'topic' ? 'No questions under this topic.' : `Not used: ${NAMES[key]} is set again on line ${line} before any question.`);
+    }
+    if (key === 'chapter' && lastSet.topic && !lastSet.topic.used) issue(lastSet.topic.line, 'warn', 'No questions under this topic.');
+    lastSet[key] = { line, used: false };
+    if (key === 'chapter') delete lastSet.topic;
+
+    if (key === 'board') Object.assign(ctx, board(value, line), { boardLine: line });
+    else if (key === 'class') ctx.class = klass(value, line);
+    else if (key === 'subject') Object.assign(ctx, subject(value, line));
+    else if (key === 'chapter') {
+      const p = numbered('chapter', value, line);
+      Object.assign(ctx, { chapter_no: p.no, chapter: p.name, topic_no: null, topic: '', chapterLine: line, topicLine: 0 });
+    } else if (key === 'topic') {
+      const p = numbered('topic', value, line);
+      Object.assign(ctx, { topic_no: p.no, topic: p.name, topicLine: line });
+    } else {
+      const d = toDifficulty(value);
+      if (d === undefined) issue(line, 'warn', `"${tidy(value)}" is not easy, medium or hard.`);
+      else ctx.difficulty = d;
+    }
   };
 
   raw.split(/\r?\n/).forEach((text, i) => {
@@ -277,30 +316,19 @@ export function format(raw: string, details: Details): Formatted {
 
     // details: "Chapter 1: Acids", "## Topic 2 - Indicators", "**Class:** 10"
     if (!delim || delim === ',') {
-      const heading = /^#{1,6}\s/.test(t);
-      const plain = tidy(t.replace(/^#{1,6}\s*/, '').replace(BULLET, ''));
-      const meta = readMeta(plain);
+      const meta = readMeta(t);
       if (meta) {
         dropPending();
-        if ('name' in meta) {
-          if (meta.kind === 'chapter') Object.assign(ctx, { chapter_no: meta.no, chapter: meta.name, topic_no: null, topic: '' });
-          else Object.assign(ctx, { topic_no: meta.no, topic: meta.name });
-        } else if (meta.kind === 'difficulty') {
-          const d = toDifficulty(meta.value);
-          if (d === undefined) issue(line, `"${tidy(meta.value)}" is not easy, medium or hard.`);
-          else ctx.difficulty = d;
-        } else ctx[meta.kind] = meta.value;
-        return;
+        return setMeta(meta.key, meta.value, line);
       }
-      if (heading) {
+      if (/^#{1,6}\s/.test(t)) {
         dropPending();
-        return issue(line, 'Heading ignored. Write it as "Topic: name" or "Chapter: name" to use it.');
+        return issue(line, 'warn', `Heading ignored. Write it as "Topic: ${plainLine(t)}" or "Chapter: ${plainLine(t)}" to use it.`);
       }
     }
 
     // a header row such as "Topic | Question | Answer", or "question,answer" for CSV
-    const csvHeader = !delim && t.includes(',');
-    const hDelim = delim || (csvHeader ? ',' : '');
+    const hDelim = delim || (t.includes(',') ? ',' : '');
     if (hDelim) {
       const cells = cellsOf(t, hDelim).map((c) => c.trim());
       const fields = cells.map(headerField);
@@ -316,11 +344,11 @@ export function format(raw: string, details: Details): Formatted {
     if (delim) {
       dropPending();
       let cells = cellsOf(t, delim);
-      let fields = headers[delim] ?? DEFAULT_FIELDS;
+      const fields = headers[delim] ?? DEFAULT_FIELDS;
       // an unlabelled numbering column copied from a spreadsheet: "1 <tab> question <tab> answer"
       if (!headers[delim] && cells.length >= 3 && /^\s*\d{1,4}[.)]?\s*$/.test(cells[0])) cells = cells.slice(1);
       if (!headers[delim] && cells.length >= 2) cells = [stripLead(cells[0]).body, ...cells.slice(1)];
-      if (cells.length < 2) return issue(line, 'Couldn\'t find a question and an answer. Put " | " between them.');
+      if (cells.length < 2) return issue(line, 'error', CANNOT_READ);
       return fromCells(line, cells, fields);
     }
 
@@ -332,7 +360,7 @@ export function format(raw: string, details: Details): Formatted {
         pending = null;
         return add(p.line, p.q, a);
       }
-      return issue(line, 'This answer has no question above it.');
+      return issue(line, 'error', 'This answer has no question above it.');
     }
 
     const pair = splitLoose(body);
@@ -350,7 +378,7 @@ export function format(raw: string, details: Details): Formatted {
       pending = null;
       return add(p.line, p.q, body);
     }
-    issue(line, 'Couldn\'t find a question and an answer. Put " | " between them.');
+    issue(line, 'error', CANNOT_READ);
   });
   dropPending();
 
@@ -358,12 +386,21 @@ export function format(raw: string, details: Details): Formatted {
   return { rows, issues };
 }
 
-/** Questions missing a detail the question bank needs, e.g. { topic: 3 }. */
-export function missing(rows: Row[]): { class: number; subject: number; chapter: number; topic: number } {
+/** Questions missing a detail the question bank needs. */
+export function missing(rows: Row[]): { board: number; class: number; subject: number; chapter: number; topic: number; id: number } {
   return {
-    class: rows.filter((r) => !r.class).length,
+    board: rows.filter((r) => !r.board).length,
+    class: rows.filter((r) => r.class === null).length,
     subject: rows.filter((r) => !r.subject).length,
-    chapter: rows.filter((r) => !r.chapter && r.chapter_no === null).length,
+    chapter: rows.filter((r) => r.chapter_no === null).length,
     topic: rows.filter((r) => !r.topic && r.topic_no === null).length,
+    id: rows.filter((r) => !r.chapter_id).length,
   };
+}
+
+/** The worst problem on each line: what the editor underlines. */
+export function lineLevels(issues: Issue[]): Map<number, Level> {
+  const out = new Map<number, Level>();
+  for (const x of issues) if (out.get(x.line) !== 'error') out.set(x.line, x.level);
+  return out;
 }

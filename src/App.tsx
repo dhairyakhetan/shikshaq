@@ -1,56 +1,68 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { Editor } from './components/Editor';
+import { Guide } from './components/Guide';
 import { RowsTable } from './components/RowsTable';
 import { EXAMPLE } from './example';
-import { COLUMNS, format, missing, type Details } from './lib/format';
+import { checkDetail, DETAIL_KEYS, detailsId, readDetails, standardDetail, writeDetail, type DetailKey } from './lib/details';
+import { COLUMNS, format, lineLevels, missing } from './lib/format';
 import { baseName, copyText, download, toCSV, toJSON, toTSV } from './lib/rows';
 
 const KEY = 'question-formatter:v1';
-const EMPTY: Details = { board: '', class: '', subject: '', chapter: '' };
-const FIELDS: { key: keyof Details; label: string; hint: string }[] = [
-  { key: 'board', label: 'Board', hint: 'CBSE' },
-  { key: 'class', label: 'Class', hint: '10' },
-  { key: 'subject', label: 'Subject', hint: 'Science' },
-  { key: 'chapter', label: 'Chapter', hint: '1: Chemical Reactions' },
-];
+const FIELDS: Record<DetailKey, { label: string; hint: string }> = {
+  board: { label: 'Board', hint: 'CBSE' },
+  class: { label: 'Class', hint: '10' },
+  subject: { label: 'Subject', hint: 'Science' },
+  chapter: { label: 'Chapter', hint: '1: Chemical Reactions' },
+};
 
-/** The draft is kept in this browser so a refresh never loses it. */
-function load(): { raw: string; details: Details } {
+/** The draft is kept in this browser so a refresh never loses it. Drafts from before the boxes lived in the text are moved into it. */
+function load(): string {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (v && typeof v.raw === 'string' && v.details && typeof v.details === 'object') {
-      const details = { ...EMPTY };
-      for (const k of Object.keys(EMPTY) as (keyof Details)[]) if (typeof v.details[k] === 'string') details[k] = v.details[k];
-      return { raw: v.raw, details };
+    if (v && typeof v.raw === 'string') {
+      let raw: string = v.raw;
+      for (const k of [...DETAIL_KEYS].reverse()) {
+        const old = v.details?.[k];
+        if (typeof old === 'string' && old.trim() && !readDetails(raw)[k]) raw = writeDetail(raw, k, old);
+      }
+      return raw;
     }
   } catch { /* private window or unreadable draft: start empty */ }
-  return { raw: '', details: EMPTY };
+  return '';
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function App() {
-  const [saved] = useState(load);
-  const [raw, setRaw] = useState(saved.raw);
-  const [details, setDetails] = useState(saved.details);
+  const [raw, setRaw] = useState(load);
   const [copied, setCopied] = useState('');
+  const [caret, setCaret] = useState(0);
   const box = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify({ raw, details })); } catch { /* storage full or blocked */ }
-  }, [raw, details]);
+    try { localStorage.setItem(KEY, JSON.stringify({ raw })); } catch { /* storage full or blocked */ }
+  }, [raw]);
 
   const text = useDeferredValue(raw);
-  const { rows, issues } = useMemo(() => format(text, details), [text, details]);
+  const { rows, issues } = useMemo(() => format(text), [text]);
+  const levels = useMemo(() => lineLevels(issues), [issues]);
+  const details = readDetails(raw);
+  const id = detailsId(details);
   const gaps = missing(rows);
-  const chapters = new Set(rows.map((r) => [r.board, r.class, r.subject, r.chapter_no, r.chapter].join('|'))).size;
-  const topics = new Set(rows.filter((r) => r.topic || r.topic_no !== null).map((r) => [r.board, r.class, r.subject, r.chapter_no, r.chapter, r.topic_no, r.topic].join('|'))).size;
+  const chapters = new Set(rows.map((r) => r.chapter_id ?? [r.board, r.class, r.subject, r.chapter_no, r.chapter].join('|'))).size;
+  const topics = new Set(rows.filter((r) => r.topic || r.topic_no !== null).map((r) => [r.chapter_id, r.board, r.class, r.subject, r.chapter_no, r.chapter, r.topic_no, r.topic].join('|'))).size;
+  const errors = issues.filter((x) => x.level === 'error').length;
   const name = baseName(rows);
 
+  // one note per count, so "no board, class or subject" is one line rather than three
+  const have = (n: number) => plural(n, 'question has', 'questions have');
+  const byCount = new Map<number, string[]>();
+  for (const [k, what] of [['board', 'board'], ['class', 'class'], ['subject', 'subject'], ['chapter', 'chapter number']] as const) {
+    if (gaps[k]) byCount.set(gaps[k], [...(byCount.get(gaps[k]) ?? []), what]);
+  }
   const notes = [
-    gaps.class > 0 && `${plural(gaps.class, 'question has', 'questions have')} no class. Fill in Class above.`,
-    gaps.subject > 0 && `${plural(gaps.subject, 'question has', 'questions have')} no subject. Fill in Subject above.`,
-    gaps.chapter > 0 && `${plural(gaps.chapter, 'question has', 'questions have')} no chapter. Fill in Chapter above, or add a line such as "Chapter 1: Name".`,
-    gaps.topic > 0 && `${plural(gaps.topic, 'question has', 'questions have')} no topic. Add a line such as "Topic 1: Name" above them.`,
+    ...[...byCount].map(([n, what]) => `${have(n)} no ${what.length > 1 ? `${what.slice(0, -1).join(', ')} or ${what[what.length - 1]}` : what[0]}, so no chapter ID. Fill in the boxes above.`),
+    gaps.topic > 0 && `${have(gaps.topic)} no topic. Add a line such as "Topic 1: Name" above them.`,
   ].filter(Boolean) as string[];
 
   const copy = async (what: string, value: string) => {
@@ -69,6 +81,7 @@ export function App() {
     const start = lines.slice(0, line - 1).reduce((n, l) => n + l.length + 1, 0);
     ta.focus();
     ta.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0));
+    setCaret(line);
     ta.scrollTop = Math.max(0, (line - 3) * (parseFloat(getComputedStyle(ta).lineHeight) || 24));
   };
 
@@ -77,31 +90,43 @@ export function App() {
       <header className="top">
         <div className="top-in">
           <span className="brand"><Logo /> Question Formatter</span>
+          <a className="top-link" href="#guide-h">How to write questions</a>
         </div>
       </header>
       <main className="page">
         <div className="intro">
           <h1>Question Formatter</h1>
-          <p>Paste questions and answers in any format. They come out as clean rows for the question bank, ready to download.</p>
+          <p>Paste questions and answers in any format. They come out as clean rows for the question bank, each linked to its chapter by an ID.</p>
         </div>
 
         <div className="layout">
           <section className="card stack" aria-labelledby="in-h">
             <h2 id="in-h">1. Paste</h2>
             <div className="details">
-              {FIELDS.map((f) => (
-                <div className="field" key={f.key}>
-                  <label htmlFor={`d-${f.key}`}>{f.label}</label>
-                  <input id={`d-${f.key}`} type="text" value={details[f.key]} placeholder={`e.g. ${f.hint}`} autoComplete="off"
-                    onChange={(e) => setDetails({ ...details, [f.key]: e.target.value })} />
-                </div>
-              ))}
+              {DETAIL_KEYS.map((k) => {
+                const problem = checkDetail(k, details[k]);
+                return (
+                  <div className="field" key={k}>
+                    <label htmlFor={`d-${k}`}>{FIELDS[k].label}</label>
+                    <input id={`d-${k}`} type="text" value={details[k]} placeholder={`e.g. ${FIELDS[k].hint}`} autoComplete="off"
+                      className={problem ? problem.level : undefined} aria-invalid={problem?.level === 'error'} aria-describedby={problem ? `d-${k}-msg` : undefined}
+                      onChange={(e) => { const v = e.target.value; setRaw((r) => writeDetail(r, k, v)); }}
+                      onBlur={(e) => {
+                        const std = standardDetail(k, e.target.value);
+                        if (std !== e.target.value) setRaw((r) => writeDetail(r, k, std));
+                      }} />
+                    {problem && <span id={`d-${k}-msg`} className={`field-msg ${problem.level}`}>{problem.text}</span>}
+                  </div>
+                );
+              })}
             </div>
-            <p className="small muted">Used for every question, unless a line in your text says otherwise, such as <code>Chapter 2: Acids</code> or <code>Topic 1: Indicators</code>.</p>
+            <p className="small muted">
+              {id ? <>Chapter ID <code className="id">{id}</code>. </> : 'Board, class, subject and chapter number make the chapter ID. '}
+              These boxes are the lines at the top of the Questions box; editing either changes both.
+            </p>
 
             <label htmlFor="q">Questions</label>
-            <textarea id="q" ref={box} className="data" spellCheck={false} value={raw} onChange={(e) => setRaw(e.target.value)}
-              placeholder={'Any format works, for example:\n\nTopic 1: Chemical equations\nWhat is ...? | Answer\n1. What is ...? Ans: Answer\nQ. What is ...?\nAns. Answer'} />
+            <Editor value={raw} onChange={setRaw} issues={issues} levels={levels} boxRef={box} caret={caret} setCaret={setCaret} />
             <div className="row">
               <button type="button" className="btn quiet" onClick={() => setRaw(EXAMPLE)}>Try an example</button>
               <button type="button" className="btn quiet" onClick={() => setRaw('')} disabled={!raw}>Clear</button>
@@ -122,11 +147,11 @@ export function App() {
             </p>
 
             {issues.length > 0 && (
-              <div className="warn">
-                <b>{plural(issues.length, 'line needs', 'lines need')} attention</b>
+              <div className={`issues${errors ? ' has-error' : ''}`}>
+                <b>{errors ? `${plural(errors, 'line')} left out` : ''}{errors && issues.length > errors ? ', ' : ''}{issues.length > errors ? `${plural(issues.length - errors, 'warning')}` : ''}</b>
                 <ul>
                   {issues.slice(0, 50).map((x, i) => (
-                    <li key={i}><button type="button" className="linkish" onClick={() => goTo(x.line)}>Line {x.line}</button>: {x.text}</li>
+                    <li key={i} className={x.level}><button type="button" className="linkish" onClick={() => goTo(x.line)}>Line {x.line}</button>: {x.text}</li>
                   ))}
                   {issues.length > 50 && <li>and {issues.length - 50} more</li>}
                 </ul>
@@ -144,6 +169,8 @@ export function App() {
             <p className="small muted">One row per question, with the columns <code>{COLUMNS.join(', ')}</code>. The CSV imports straight into a database table.</p>
           </section>
         </div>
+
+        <Guide />
       </main>
     </>
   );

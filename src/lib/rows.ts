@@ -26,10 +26,15 @@ export function toTSV(rows: Row[]): string {
   return [COLUMNS.join('\t'), ...rows.map((r) => COLUMNS.map((c) => cell(toRecord(r)[c]).replace(/\t/g, ' ')).join('\t'))].join('\n');
 }
 
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/** File name: the chapter ID and name when everything is one chapter ("CBSE10SCI01-chemical-reactions"), else the subject. */
 export function baseName(rows: Row[]): string {
   const first = rows[0];
-  const name = first ? [first.subject, first.chapter_no !== null ? `ch${first.chapter_no}` : '', first.chapter].filter(Boolean).join(' ') : '';
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'questions';
+  if (!first) return 'questions';
+  const one = rows.every((r) => r.chapter_id === first.chapter_id && r.chapter === first.chapter);
+  const name = one && first.chapter_id ? [first.chapter_id, slug(first.chapter)].filter(Boolean).join('-') : [slug(first.subject), 'questions'].filter(Boolean).join('-');
+  return name.slice(0, 80).replace(/-$/, '');
 }
 
 export function download(name: string, text: string, mime: string): void {
