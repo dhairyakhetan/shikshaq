@@ -11,6 +11,27 @@ import { counts, setStatus, toCSV, toJSON, toRecord, toTSV, type Bank } from '..
 
 const qa = (raw: string) => format(raw).rows.map((r) => [r.question, r.answer]);
 const HEAD = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Matter\n';
+/** The same questions in many shapes at once: what people really paste. */
+const MIXED = `Board: cbse
+Class: X
+Subject: science
+Chapter 1: chemical reactions and equations
+
+Topic 1: chemical equations
+1. Equation with the same number of atoms of each element on both sides? Ans: Balanced equation
+2. Q. Which law requires a chemical equation to be balanced?
+Ans. Law of conservation of mass
+
+## Topic 2: types of chemical reactions
+- Reaction in which two or more reactants form a single product | Combination reaction | easy
+- Reaction in which a single reactant breaks down into simpler products = Decomposition reaction
+- Gain of oxygen by a substance during a reaction - Oxidation
+
+Topic 3: effects of oxidation in everyday life
+Q3) Common name for the corrosion of iron? Rusting
+Gas filled in chip packets to keep the chips from going rancid | Nitrogen | easy
+What do fats and oils become when they are oxidised?
+`;
 
 describe('reading questions and answers', () => {
   it('reads every common shape the same way', () => {
@@ -83,9 +104,21 @@ describe('reading questions and answers', () => {
   });
 });
 
+describe('"Try an example"', () => {
+  it('shows only the one format, and reads cleanly with nothing missing', () => {
+    const { rows, issues } = format(EXAMPLE);
+    expect(issues).toEqual([]);
+    expect(missing(rows)).toEqual({ board: 0, class: 0, subject: 0, chapter: 0, topic: 0, id: 0 });
+    for (const line of EXAMPLE.split('\n').filter(Boolean)) {
+      expect(line).toMatch(/^(Board|Class|Subject): \S|^(Chapter|Topic) \d+: \S|^[^|]+ \| [^|]+( \| (easy|medium|hard))?$/);
+    }
+    expect(rows.map((r) => r.answer)).toEqual(format(MIXED).rows.map((r) => r.answer));
+  });
+});
+
 describe('details: board, class, subject, chapter, topic, difficulty', () => {
   it('takes them from lines in any common style and writes names the standard way', () => {
-    const { rows, issues } = format(EXAMPLE);
+    const { rows, issues } = format(MIXED);
     expect(issues.map((x) => [x.line, x.level, x.text])).toEqual([[19, 'error', 'This question has no answer.']]);
     expect(rows).toHaveLength(7);
     expect(new Set(rows.map((r) => `${r.chapter_id} ${r.board}/${r.class}/${r.subject}/${r.chapter_no}/${r.chapter}`)))
@@ -182,7 +215,7 @@ describe('details: board, class, subject, chapter, topic, difficulty', () => {
 });
 
 describe('output for the database', () => {
-  const { rows } = format(EXAMPLE);
+  const { rows } = format(MIXED);
 
   it('has one flat record per question, with null for missing values', () => {
     expect(toRecord(rows[0])).toEqual({
@@ -399,7 +432,7 @@ describe('the question bank (behind the HoD desk)', () => {
   it('approves, sends back with a reason, and moves back to waiting, on the page\'s copy', () => {
     const bank: Bank = {
       batches: [{ id: 'B20261009-01', by: 'A', email: '', at }],
-      questions: format(EXAMPLE).rows.map((r, i) => ({ ...r, id: `q${i}`, batch: 'B20261009-01', status: 'pending', note: '', reviewedAt: null })),
+      questions: format(MIXED).rows.map((r, i) => ({ ...r, id: `q${i}`, batch: 'B20261009-01', status: 'pending', note: '', reviewedAt: null })),
     };
     const [a, b, c] = bank.questions.map((q) => q.id);
     let next = setStatus(bank, [a, b], 'approved', 'ignored', at);

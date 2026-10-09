@@ -1,7 +1,11 @@
-/** The question formatter: teachers paste questions in any format, check them, and send them for approval or download them. */
+/**
+ * The question formatter: teachers write questions in one format (Question | Answer, under detail and Topic lines; other
+ * common layouts are read too, quietly), check them, and send them for approval or download them. The example's
+ * questions can't be sent.
+ */
 import { Fragment, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { checkDetail, DETAIL_KEYS, detailLine, detailsId, LABEL, readDetails, standardDetail, writeDetail, type DetailKey } from './details';
-import { COLUMNS, sendBatch, toCSV, toJSON, toTSV } from './db';
+import { COLUMNS, sendBatch, toCSV, toJSON, toTSV, type Row } from './db';
 import { baseName, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from './format';
 import { Guide } from './Guide';
 import { ActionIcon, ArrowDownIcon, CopyIcon, download, DownloadIcon, Link, RowsTable, SendIcon, useUndo } from './ui';
@@ -9,6 +13,9 @@ import { ActionIcon, ArrowDownIcon, CopyIcon, download, DownloadIcon, Link, Rows
 const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: 'Science', chapter: '1: Chemical Reactions' };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** The example's questions: they are only for trying the page, so they are never sent. */
+const EXAMPLE_QUESTIONS = new Set(format(EXAMPLE).rows.map((r) => r.question.toLowerCase()));
+const fromExample = (r: Row) => EXAMPLE_QUESTIONS.has(r.question.toLowerCase());
 const motion = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
 /** Scrolls smoothly to a part of the page and moves keyboard focus there, without adding "#..." to the address. */
@@ -107,14 +114,16 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack }: { teacher: 
     setBatch((b) => b + 1);
   };
 
-  /** Sends the questions to the HoD as one batch. */
-  const ready = rows.filter((r) => r.chapter_id).length;
+  /** Sends the questions to the HoD as one batch (not the example's). */
+  const examples = rows.filter(fromExample).length;
+  const ready = rows.filter((r) => r.chapter_id && !fromExample(r)).length;
+  const noId = rows.filter((r) => !r.chapter_id && !fromExample(r)).length;
   const send = async () => {
     setSending(true);
     setSent(null);
     setSendError('');
     try {
-      const result = await sendBatch(rows);
+      const result = await sendBatch(rows.filter((r) => !fromExample(r)));
       setSent(result);
       if (result.sent) { flash('send'); onSent(); }
     } catch (e) {
@@ -144,7 +153,7 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack }: { teacher: 
       <main className="page">
         <div className="intro enter">
           <h1>Question Formatter</h1>
-          <p>Paste questions and answers in any format. They come out as clean rows for the question bank, each linked to its chapter by an ID.</p>
+          <p>Write one question per line: the question, a bar <code>|</code>, then the answer. They come out as clean rows for the question bank, each linked to its chapter by an ID.</p>
         </div>
 
         <div className="layout">
@@ -237,13 +246,20 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack }: { teacher: 
             <form className="send" onSubmit={(e) => { e.preventDefault(); send(); }}>
               <h3>3. Send for approval</h3>
               <p className="small muted">Your HoD checks the questions. Only approved ones go into the question bank and the games.</p>
+              {examples > 0 && (
+                <p className="example-warn" role="status">
+                  {examples === rows.length
+                    ? <><b>This is the example.</b> Its questions can't be sent. Write or paste your own questions in their place.</>
+                    : <><b>{plural(examples, 'question is', 'questions are')} from the example</b>, so {examples === 1 ? "it won't" : "they won't"} be sent. Only your own questions are sent.</>}
+                </p>
+              )}
               <div className="row signed-in">
                 <button type="submit" className={`btn dark${done === 'send' ? ' is-done' : ''}`} disabled={!ready || sending}>
                   <ActionIcon done={done === 'send'}><SendIcon /></ActionIcon>{sending ? 'Sending…' : ready ? `Send ${plural(ready, 'question')}` : 'Send'}
                 </button>
                 <p className="small muted">Sending as <b>{teacher}</b>.</p>
               </div>
-              {rows.length > ready && <p className="small muted">{plural(rows.length - ready, 'question has', 'questions have')} no chapter ID and can't be sent yet. Fill in the boxes above.</p>}
+              {noId > 0 && <p className="small muted">{plural(noId, 'question has', 'questions have')} no chapter ID and can't be sent yet. Fill in the boxes above.</p>}
               {sent && (
                 <p className={`sent-note ${sent.sent ? 'ok' : 'warn'}`} key={JSON.stringify(sent)}>
                   {sent.sent ? <>Sent {plural(sent.sent, 'question')} to the HoD as batch <b>{sent.batchId}</b>. </> : 'Nothing new to send. '}
@@ -339,7 +355,7 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
           onPaste={() => { pasted.current = true; onPaste(); }}
           onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => onTyping(null)}
           onScroll={sync} onSelect={(e) => onCaret(e.currentTarget)} onClick={(e) => onCaret(e.currentTarget)} onKeyUp={(e) => onCaret(e.currentTarget)}
-          placeholder={'Any format works, for example:\n\nTopic 1: Chemical equations\nWhat is ...? | Answer\n1. What is ...? Ans: Answer\nQ. What is ...?\nAns. Answer'} />
+          placeholder={'One question per line, like this:\n\nTopic 1: Chemical Equations\nQuestion | Answer\nQuestion | Answer | easy'} />
       </div>
       <p id="caret-note" className={`caret-note${here.length ? ` ${here.some((x) => x.level === 'error') ? 'error' : 'warn'}` : ''}`} aria-live="polite">
         {here.length

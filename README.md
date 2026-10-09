@@ -4,7 +4,7 @@ One page with three parts; nothing shows until you sign in with Google. Everyone
 
 | Page | For | What it does |
 | --- | --- | --- |
-| `/` **Question formatter** | Teachers | Paste questions and answers in any format, get clean rows, send them to the HoD. |
+| `/` **Question formatter** | Teachers | Write questions as `Question \| Answer`, get clean rows, send them to the HoD. |
 | `/hod/` **HoD desk** | HoDs and admins | Approve questions or send them back with a reason. Approved questions are the question bank. |
 | `/play/` **Revise** | Students | Pick the topics you studied and play a crossword, word search, matching or fill-in-the-blank puzzle made from them. |
 
@@ -19,7 +19,9 @@ reason. The number of new ones shows on their avatar at the top of every page.
 
 ## Question formatter (`/`)
 
-Paste questions and answers in any format; get clean rows for the question bank, one row per question:
+Write one question per line, `Question | Answer` (add `| easy`, `| medium` or `| hard` if you like), under the board,
+class, subject, chapter and topic lines. Other common layouts (below) are still read, but the page only shows this one.
+You get clean rows for the question bank, one row per question:
 
 ```
 chapter_id, topic_id, board, class, subject, chapter_no, chapter, topic_no, topic, question_no, question, answer, difficulty
@@ -66,7 +68,7 @@ The lists live in `src/details.ts`.
   a second. Timings and the easing curve are Shikshaq's; only success moments (a solved puzzle, a new count) pop slightly.
   Only transform and opacity animate, and with "reduce motion" switched on only short fades remain. The header is a solid
   pill floating at the top, as on Shikshaq.
-- **How to write your questions**: a guide for people at the bottom of the page (formats, detail lines, good questions, what the
+- **How to write your questions**: a guide for people at the bottom of the page (the format, detail lines, good questions, what the
   underlines mean, the IDs, board and subject codes, starting from notes).
 
 ## HoD desk (`/hod/`)

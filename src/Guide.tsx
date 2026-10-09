@@ -25,10 +25,10 @@ export function Guide() {
 
       <div className="guide-grid">
         <article className="g-card wide">
-          <h3>The quickest way</h3>
+          <h3>The format</h3>
           <ol className="steps">
             <li><b>Fill in Board, Class, Subject and Chapter.</b> They are written at the top of the Questions box for you, and you can edit them in either place.</li>
-            <li><b>Add a Topic line, then one question per line</b>, with a bar between the question and the answer.</li>
+            <li><b>Add a Topic line, then one question per line:</b> the question, a bar <code>|</code>, then the answer. To say how hard it is, add another bar and <i>easy</i>, <i>medium</i> or <i>hard</i>.</li>
             <li><b>Fix anything underlined</b>, check the table, then <b>send it for approval</b> (or download it). Your HoD approves it on the Approve page; only approved questions are used in the games.</li>
           </ol>
           <pre className="sample">{`Board: CBSE
@@ -49,32 +49,15 @@ Reaction in which a single reactant breaks down into simpler products | Decompos
             <dt><code>Board: CBSE</code></dt>
             <dd>CBSE, ICSE, ISC, IB, IGCSE, Cambridge, NIOS, or a state board such as <i>Maharashtra</i>.</dd>
             <dt><code>Class: 10</code></dt>
-            <dd>1 to 12. <i>10th</i>, <i>X</i> and <i>Class 10</i> all work.</dd>
+            <dd>1 to 12.</dd>
             <dt><code>Subject: Chemistry</code></dt>
-            <dd>Short names work too: <i>chem</i>, <i>maths</i>, <i>sst</i>.</dd>
+            <dd>The subject's full name.</dd>
             <dt><code>Chapter 3: Acids, Bases and Salts</code></dt>
-            <dd>Number and name, as in the textbook. A new chapter starts with no topic.</dd>
+            <dd>Number and name, as in the textbook.</dd>
             <dt><code>Topic 2: Indicators</code></dt>
-            <dd>Number it to match the textbook. Without a number, topics are counted in order.</dd>
-            <dt><code>Difficulty: hard</code></dt>
-            <dd>Optional: easy, medium or hard. Or add it to one question: <code>Q | A | hard</code>.</dd>
+            <dd>Number and name, as in the textbook. Its questions go under it.</dd>
           </dl>
           <p className="small muted">Names are capitalised for you: <i>acids, bases and salts</i> becomes <i>Acids, Bases and Salts</i>. Questions and answers are never changed.</p>
-        </article>
-
-        <article className="g-card">
-          <h3>Other formats that work</h3>
-          <p>Paste what you have. All of these give the same row:</p>
-          <ul className="formats">
-            <li><code>What is H₂O? | Water</code></li>
-            <li><code>1. What is H₂O? Ans: Water</code></li>
-            <li><code>Q. What is H₂O?</code> then <code>Ans. Water</code> on the next line</li>
-            <li><code>What is H₂O? Water</code></li>
-            <li><code>Chemical name of water = H₂O</code>, or with <code> - </code> or <code>: </code></li>
-            <li>Two columns copied from Google Sheets or Excel</li>
-            <li>A table with a header row, in any column order: <code>Chapter | Topic | Question | Answer</code></li>
-          </ul>
-          <p className="small muted">Numbering, bullets, <i>Q.</i> and <i>Ans:</i> labels, bold and code blocks are removed.</p>
         </article>
 
         <article className="g-card">
