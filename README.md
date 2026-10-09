@@ -1,6 +1,6 @@
 # Shikshaq question bank and revision games
 
-One page with three parts; nothing shows until you sign in with Google. Everyone signed in gets the formatter and the HoD desk (only HoDs and the admin can approve); only the admin gets Revise. The parts share only the question bank (`src/db.ts`):
+One page with three parts; nothing shows until you sign in with Google. Everyone signed in gets the formatter, the HoD desk (only HoDs and admins can approve) and a profile page with an avatar; only admins get Revise, and manage people and roles from their profile. The parts share only the question bank (`src/db.ts`):
 
 | Page | For | What it does |
 | --- | --- | --- |

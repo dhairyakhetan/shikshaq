@@ -100,6 +100,7 @@ export const SECTIONS = [
   { key: 'formatter', name: 'Question formatter', link: 'Formatter', href: '/' },
   { key: 'hod', name: 'HoD desk', link: 'HoD desk', href: '/hod/' },
   { key: 'play', name: 'Revise', link: 'Revise', href: '/play/' },
+  { key: 'profile', name: 'Your profile', link: 'Profile', href: '/profile/' },
 ] as const;
 export type Section = (typeof SECTIONS)[number]['key'];
 
@@ -133,7 +134,7 @@ export function useRoute() {
 }
 
 /** A link to another part of the site that doesn't reload the page. */
-export function Link({ href, className, children, ...rest }: { href: string; className?: string; children: ReactNode; 'aria-current'?: 'page' }) {
+export function Link({ href, className, children, ...rest }: { href: string; className?: string; children: ReactNode; 'aria-current'?: 'page'; 'aria-label'?: string }) {
   const click = (e: MouseEvent) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return; // a new tab still works
     e.preventDefault();
@@ -144,9 +145,10 @@ export function Link({ href, className, children, ...rest }: { href: string; cla
 
 /**
  * The header: on the left the part's name and anything that belongs to that part only (`left`), so the links on the
- * right never move when the part changes; on the right the parts this person may open, the number waiting, Sign out.
+ * right never move when the part changes; on the right the parts this person may open, the number waiting, and their
+ * avatar, which opens their profile.
  */
-export function SectionHeader({ here, pages, waiting = 0, name, onSignOut, left }: { here: Section; pages: Section[]; waiting?: number; name: string; onSignOut: () => void; left?: ReactNode }) {
+export function SectionHeader({ here, pages, waiting = 0, name, avatar, left }: { here: Section; pages: Section[]; waiting?: number; name: string; avatar: number; left?: ReactNode }) {
   return (
     <header className="top">
       <div className="top-in">
@@ -160,10 +162,53 @@ export function SectionHeader({ here, pages, waiting = 0, name, onSignOut, left 
               {s.link}{s.key === 'hod' && waiting > 0 && <span className="badge pop" key={waiting}>{waiting}</span>}
             </Link>
           ))}
-          <button type="button" className="top-link" title={`Signed in as ${name}`} aria-label="Sign out" onClick={onSignOut}><SignOutIcon /><span className="wide-only">Sign out</span></button>
+          <Link href="/profile/" className={`me${here === 'profile' ? ' on' : ''}`} aria-current={here === 'profile' ? 'page' : undefined} aria-label={`Your profile (${name})`}>
+            <Avatar n={avatar} />
+          </Link>
         </nav>
       </div>
     </header>
+  );
+}
+
+// ---------------------------------------------------------------- avatars
+
+/** Eight faces on bold colours, to pick from on the profile page. */
+const AVATARS: { bg: string; fg: string; eyes: 'dots' | 'happy' | 'calm' | 'wink'; mouth: 'smile' | 'small' | 'o' | 'flat' | 'grin' }[] = [
+  { bg: '#FF8000', fg: '#1F1F1F', eyes: 'dots', mouth: 'smile' },
+  { bg: '#4351FF', fg: '#FFFFFF', eyes: 'dots', mouth: 'small' },
+  { bg: '#34B268', fg: '#1F1F1F', eyes: 'happy', mouth: 'small' },
+  { bg: '#E5484D', fg: '#FFFFFF', eyes: 'wink', mouth: 'smile' },
+  { bg: '#7C3AED', fg: '#FFFFFF', eyes: 'dots', mouth: 'o' },
+  { bg: '#0E7490', fg: '#FFFFFF', eyes: 'calm', mouth: 'flat' },
+  { bg: '#F2A900', fg: '#1F1F1F', eyes: 'dots', mouth: 'grin' },
+  { bg: '#1F1F1F', fg: '#FF8000', eyes: 'happy', mouth: 'smile' },
+];
+export const AVATAR_COUNT = AVATARS.length;
+/** A starting avatar for each person, from their email, so two people rarely start with the same one. */
+export const avatarFor = (email: string) => [...email].reduce((n, ch) => n + ch.charCodeAt(0), 0) % AVATAR_COUNT;
+
+export function Avatar({ n, size = 32 }: { n: number; size?: number }) {
+  const a = AVATARS[((n % AVATAR_COUNT) + AVATAR_COUNT) % AVATAR_COUNT];
+  const line = { stroke: a.fg, strokeWidth: 4.5, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none' } as const;
+  const eye = (x: number, kind: typeof a.eyes) =>
+    kind === 'happy' ? <path d={`M${x - 6} 29l6-6 6 6`} {...line} />
+      : kind === 'calm' ? <path d={`M${x - 5} 27h10`} {...line} />
+      : <circle cx={x} cy={26} r={4.2} fill={a.fg} />;
+  const mouth = {
+    smile: <path d="M19 39q13 13 26 0" {...line} />,
+    small: <path d="M25 41q7 6 14 0" {...line} />,
+    o: <circle cx={32} cy={44} r={5} {...line} />,
+    flat: <path d="M24 43h16" {...line} />,
+    grin: <path d="M18 38h28q-2 15-14 15t-14-15z" fill={a.fg} />,
+  }[a.mouth];
+  return (
+    <svg className="avatar" width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+      <rect width="64" height="64" rx="14" fill={a.bg} />
+      {eye(21, a.eyes === 'wink' ? 'dots' : a.eyes)}
+      {eye(43, a.eyes === 'wink' ? 'calm' : a.eyes)}
+      {mouth}
+    </svg>
   );
 }
 

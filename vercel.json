@@ -49,6 +49,10 @@
     {
       "source": "/play/",
       "destination": "/index.html"
+    },
+    {
+      "source": "/profile/",
+      "destination": "/index.html"
     }
   ]
 }

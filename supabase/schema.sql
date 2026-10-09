@@ -11,12 +11,12 @@
 --
 -- Who can do what (sign-in is Supabase Auth with Google only; keep the Email provider off, so nobody can claim an
 -- email without proving it). Nothing at all is readable without signing in.
---   teacher   anyone signed in: reads question_bank, waiting_count(), hod_questions(); submit_batch(questions) sends a
---             batch as themselves (name and email from their Google account)
+--   member    anyone signed in (saved in public.roles the first time they open the site): reads question_bank,
+--             waiting_count(), hod_questions(); submit_batch(questions) sends a batch as themselves
 --   hod       also hod_set_status(ids, new_status, reason): approve, send back, move back to waiting
---   admin     the same as an HoD in the database; the site also shows them Revise
--- my_role() tells the site which one the signed-in person is. Roles live in public.roles; add an HoD with:
---   insert into public.roles (email, role) values ('name@example.com', 'hod');
+--   admin     the same as an HoD in the database, plus admin_people(), admin_set_role(email, role), admin_remove(email);
+--             the site also shows the admin Revise
+-- my_role() saves a new person as a member and tells the site their role, every time the site opens.
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
@@ -25,25 +25,77 @@ revoke all on schema private from public, anon, authenticated;
 create function private.norm(t text) returns text language sql immutable set search_path = ''
 as $$ select lower(regexp_replace(btrim(t), '\s+', ' ', 'g')) $$;
 
--- admins and HoDs, by email (not readable through the API); everyone else signed in is a teacher
+-- everyone who has signed in, and anyone the admin added, with their role
 create table public.roles (
   email text primary key check (email = lower(email)),
-  role text not null check (role in ('admin', 'hod')),
-  added_at timestamptz not null default now()
+  role text not null constraint roles_role_check check (role in ('admin', 'hod', 'member')),
+  name text,
+  added_at timestamptz not null default now(),
+  last_seen_at timestamptz
 );
 
--- the signed-in person's role: admin, hod or teacher; null when not signed in with Google
+-- the signed-in person's role: admin, hod or member; null when not signed in with Google
 create function private.role() returns text language sql stable security definer set search_path = ''
 as $$
   select case
     when auth.uid() is null or not coalesce((auth.jwt() -> 'app_metadata' -> 'providers') ? 'google', false) then null
-    else coalesce((select r.role from public.roles r where r.email = lower(auth.jwt() ->> 'email')), 'teacher')
+    else coalesce((select r.role from public.roles r where r.email = lower(auth.jwt() ->> 'email')), 'member')
   end
 $$;
+
+-- HoDs and the admin can approve
 create function private.is_hod() returns boolean language sql stable security definer set search_path = ''
 as $$ select coalesce(private.role() in ('hod', 'admin'), false) $$;
-create function public.my_role() returns text language sql stable security definer set search_path = ''
-as $$ select private.role() $$;
+
+-- called every time the site opens: saves a new person as a member, notes their name and when they were last here,
+-- and returns their role (so a change made by the admin shows on their next refresh)
+create function public.my_role() returns text language plpgsql security definer set search_path = ''
+as $$
+declare
+  mail text := lower(auth.jwt() ->> 'email');
+  who text := coalesce(nullif(btrim(auth.jwt() -> 'user_metadata' ->> 'full_name'), ''), nullif(btrim(auth.jwt() -> 'user_metadata' ->> 'name'), ''));
+begin
+  if private.role() is null then return null; end if;
+  insert into public.roles (email, role, name, last_seen_at) values (mail, 'member', who, now())
+  on conflict (email) do update set name = coalesce(excluded.name, public.roles.name), last_seen_at = now();
+  return (select r.role from public.roles r where r.email = mail);
+end $$;
+
+-- the admin's list of people
+create function public.admin_people() returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+begin
+  if private.role() is distinct from 'admin' then raise exception 'Only the admin can see this.'; end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object('email', r.email, 'name', r.name, 'role', r.role, 'added_at', r.added_at, 'last_seen_at', r.last_seen_at)
+                     order by case r.role when 'admin' then 0 when 'hod' then 1 else 2 end, coalesce(r.name, r.email))
+    from public.roles r
+  ), '[]');
+end $$;
+
+-- the admin adds someone, or changes their role (admin, hod or member)
+create function public.admin_set_role(person text, new_role text) returns void language plpgsql security definer set search_path = ''
+as $$
+declare
+  mail text := lower(btrim(coalesce(person, '')));
+begin
+  if private.role() is distinct from 'admin' then raise exception 'Only the admin can change roles.'; end if;
+  if new_role not in ('admin', 'hod', 'member') then raise exception 'Unknown role.'; end if;
+  if mail !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then raise exception 'That doesn''t look like an email address.'; end if;
+  if mail = lower(auth.jwt() ->> 'email') and new_role <> 'admin' then raise exception 'You can''t take away your own admin role.'; end if;
+  insert into public.roles (email, role) values (mail, new_role) on conflict (email) do update set role = excluded.role;
+end $$;
+
+-- the admin removes someone from the list (if they sign in again, they come back as a member)
+create function public.admin_remove(person text) returns void language plpgsql security definer set search_path = ''
+as $$
+declare
+  mail text := lower(btrim(coalesce(person, '')));
+begin
+  if private.role() is distinct from 'admin' then raise exception 'Only the admin can remove people.'; end if;
+  if mail = lower(auth.jwt() ->> 'email') then raise exception 'You can''t remove yourself.'; end if;
+  delete from public.roles where email = mail;
+end $$;
 
 -- ---------------------------------------------------------------- tables
 
@@ -264,8 +316,8 @@ end $$;
 
 revoke execute on function public.submit_batch(text, jsonb), public.waiting_count(), public.hod_questions(),
   public.hod_set_status(text[], text, text) from public;
--- everything needs a sign-in; approving also needs an HoD or admin (checked inside hod_set_status)
+-- everything needs a sign-in; approving also needs an HoD or admin, people and roles need the admin (checked inside)
 revoke execute on function public.waiting_count(), public.hod_questions(), public.my_role(), public.submit_batch(jsonb),
-  public.hod_set_status(text[], text, text) from public, anon;
+  public.hod_set_status(text[], text, text), public.admin_people(), public.admin_set_role(text, text), public.admin_remove(text) from public, anon;
 grant execute on function public.waiting_count(), public.hod_questions(), public.my_role(), public.submit_batch(jsonb),
-  public.hod_set_status(text[], text, text) to authenticated;
+  public.hod_set_status(text[], text, text), public.admin_people(), public.admin_set_role(text, text), public.admin_remove(text) to authenticated;

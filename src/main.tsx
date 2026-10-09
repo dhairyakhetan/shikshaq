@@ -1,7 +1,7 @@
 /**
- * The whole site, as one page. Nothing shows until the person signs in with Google. Then the database says their role:
- * everyone signed in gets the formatter and the HoD desk (only HoDs and the admin can approve there); only the admin gets
- * Revise. Moving between the parts doesn't reload the page: the header stays and the parts crossfade.
+ * The whole site, as one page. Nothing shows until the person signs in with Google. Then the database says their role
+ * (and saves a new person as a member): everyone signed in gets the formatter, the HoD desk (only HoDs and admins can
+ * approve there) and their profile; only admins get Revise. Moving between the parts doesn't reload the page: the header stays and the parts crossfade.
  * A part stays open once visited, so its text, puzzle or list is still there on the way back.
  */
 import { StrictMode, useEffect, useState, type ReactNode } from 'react';
@@ -11,6 +11,7 @@ import { myRole, nameOf, signIn, signOut, useLoad, useSession, waitingCount, typ
 import { Formatter } from './formatter';
 import { HodDesk } from './hod';
 import { Revise } from './play';
+import { ProfilePage, useProfile } from './profile';
 import { GoogleIcon, Logo, SectionHeader, useRoute, type Section } from './ui';
 
 /** Scrolls down to the guide at the bottom of the formatter, without adding "#..." to the address. */
@@ -20,7 +21,7 @@ function toGuide() {
   el?.focus({ preventScroll: true });
 }
 
-const partOf = (path: string): Section => (path.startsWith('/hod') ? 'hod' : path.startsWith('/play') ? 'play' : 'formatter');
+const partOf = (path: string): Section => (path.startsWith('/hod') ? 'hod' : path.startsWith('/play') ? 'play' : path.startsWith('/profile') ? 'profile' : 'formatter');
 
 function App() {
   const session = useSession();
@@ -33,11 +34,12 @@ function App() {
   const waiting = useLoad(waitingCount);
   useEffect(() => { if (who) waiting.reload(); }, [who, waiting.reload]);
   const path = useRoute();
+  const [profile, setProfile] = useProfile(session?.user.email ?? '');
   const [opened, setOpened] = useState<Set<Section>>(new Set());
 
   const pages: Section[] = role.role === 'admin' ? ['formatter', 'hod', 'play'] : ['formatter', 'hod'];
   const wanted = partOf(path);
-  const here = pages.includes(wanted) ? wanted : 'formatter';
+  const here = pages.includes(wanted) || wanted === 'profile' ? wanted : 'formatter';
   useEffect(() => {
     if (!role.role) return;
     if (here !== wanted) history.replaceState(null, '', '/'); // Revise is only for the admin
@@ -63,14 +65,15 @@ function App() {
 
   const parts: Record<Section, () => ReactNode> = {
     formatter: () => <Formatter teacher={nameOf(session)} onSent={waiting.reload} />,
-    hod: () => <HodDesk canApprove={role.role !== 'teacher'} onChange={waiting.reload} />,
+    hod: () => <HodDesk canApprove={role.role === 'hod' || role.role === 'admin'} onChange={waiting.reload} />,
     play: () => <Revise />,
+    profile: () => <ProfilePage name={nameOf(session)} email={session.user.email ?? ''} role={role.role ?? 'member'} profile={profile} onChange={setProfile} onSignOut={() => signOut()} />,
   };
   return (
     <>
-      <SectionHeader here={here} pages={pages} waiting={waiting.data ?? 0} name={nameOf(session)} onSignOut={() => signOut()}
+      <SectionHeader here={here} pages={pages} waiting={waiting.data ?? 0} name={nameOf(session)} avatar={profile.avatar}
         left={here === 'formatter' && <button type="button" className="top-link" onClick={toGuide}><span className="wide-only">How to write questions</span><span className="narrow-only">Guide</span></button>} />
-      {pages.filter((p) => opened.has(p) || p === here).map((p) => (
+      {[...pages, 'profile' as const].filter((p) => opened.has(p) || p === here).map((p) => (
         <div key={p} className="part" hidden={p !== here}>{parts[p]()}</div>
       ))}
     </>

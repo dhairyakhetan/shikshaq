@@ -161,9 +161,22 @@ export async function loadForHod(): Promise<Bank> {
 export const saveStatus = (ids: string[], status: Status, reason = '') =>
   ask<{ question_id: string }[]>(supabase.rpc('hod_set_status', { ids, new_status: status, reason }));
 
-/** What the signed-in person may do: admin (everything, and Revise), hod (approve) or teacher (send). */
-export type Role = 'admin' | 'hod' | 'teacher';
+/**
+ * What the signed-in person may do: member (send questions, see the HoD desk), hod (also approve) or admin (also Revise,
+ * and people and roles). Asked every time the site opens, so a change the admin makes shows on the person's next refresh.
+ * The database also saves a new person as a member.
+ */
+export type Role = 'admin' | 'hod' | 'member';
+export const ROLE_NAMES: Record<Role, string> = { admin: 'Admin', hod: 'HoD', member: 'Member' };
 export const myRole = () => ask<Role | null>(supabase.rpc('my_role'));
+
+/** The admin's list of people: everyone who has signed in, and anyone the admin added. */
+export interface Person { email: string; name: string | null; role: Role; added_at: string; last_seen_at: string | null }
+export const loadPeople = () => ask<Person[]>(supabase.rpc('admin_people'));
+/** Adds someone, or changes their role. Admin only. */
+export const setPersonRole = (email: string, role: Role) => ask<null>(supabase.rpc('admin_set_role', { person: email, new_role: role }));
+/** Takes someone off the list (if they sign in again, they come back as a member). Admin only. */
+export const removePerson = (email: string) => ask<null>(supabase.rpc('admin_remove', { person: email }));
 
 /** Loads something when the page opens. `reload` fetches again and keeps showing the old data until the new arrives. */
 export function useLoad<T>(load: () => Promise<T>) {
