@@ -1,149 +1,158 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { CloudPanel } from './components/CloudPanel';
-import { DataStep } from './components/DataStep';
-import { DownloadStep } from './components/DownloadStep';
-import { GameStep } from './components/GameStep';
-import { Header, type Step } from './components/Header';
-import { Instructions } from './components/Instructions';
-import { LayoutOptions } from './components/LayoutOptions';
-import { Tips } from './components/Tips';
-import { build } from './lib/build';
-import { layoutFiles } from './lib/bundle';
-import { cloudConfig } from './lib/cloud';
-import { saveFile } from './lib/files';
-import { GAMES, META, usable } from './lib/games';
-import { DEFAULT_PER_LAYOUT, LAYOUT_COUNT_CHOICES, MAX_LAYOUTS, PER_LAYOUT_CHOICES, firstLayouts, layoutSeed, planLayouts, type Order } from './lib/layouts';
-import { FORMATS, makeOutput, zipName } from './lib/output';
-import { parsePairs } from './lib/parse';
-import { makeZip } from './lib/zip';
-import { SAMPLE, SAMPLE_TITLE } from './sample';
-import type { FormatId, GameId } from './types';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { RowsTable } from './components/RowsTable';
+import { EXAMPLE } from './example';
+import { COLUMNS, format, missing, type Details } from './lib/format';
+import { baseName, copyText, download, toCSV, toJSON, toTSV } from './lib/rows';
 
-interface State {
-  title: string; raw: string; game: GameId; fmt: FormatId; showKey: boolean;
-  /** Questions per layout; number of layouts (0 = as many as it takes); order of the questions and its shuffle. */
-  perLayout: number; layouts: number; order: Order; deal: number;
-  /** The layout on show (0-based) and, per layout, how often "Rearrange" was pressed. */
-  current: number; rolls: number[];
-}
+const KEY = 'question-formatter:v1';
+const EMPTY: Details = { board: '', class: '', subject: '', chapter: '' };
+const FIELDS: { key: keyof Details; label: string; hint: string }[] = [
+  { key: 'board', label: 'Board', hint: 'CBSE' },
+  { key: 'class', label: 'Class', hint: '10' },
+  { key: 'subject', label: 'Subject', hint: 'Science' },
+  { key: 'chapter', label: 'Chapter', hint: '1: Chemical Reactions' },
+];
 
-/** Set at build time (VITE_SUPABASE_URL and a public key). Without it the "Save online" part simply isn't there. */
-const CLOUD = cloudConfig();
-
-const KEY = 'game-maker:v1';
-const DEFAULTS: State = { title: SAMPLE_TITLE, raw: SAMPLE, game: 'crossword', fmt: 'json', showKey: false, perLayout: DEFAULT_PER_LAYOUT, layouts: 0, order: 'written', deal: 1, current: 0, rolls: [] };
-
-const whole = (v: unknown, min: number, max: number): v is number => Number.isInteger(v) && (v as number) >= min && (v as number) <= max;
-
-/** Last session's work, so a refresh never loses the user's questions. Anything unexpected falls back to the defaults. */
-function load(): State {
+/** The draft is kept in this browser so a refresh never loses it. */
+function load(): { raw: string; details: Details } {
   try {
-    const o = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<State> | null;
-    if (!o || typeof o !== 'object') return DEFAULTS;
-    return {
-      title: typeof o.title === 'string' ? o.title : DEFAULTS.title,
-      raw: typeof o.raw === 'string' ? o.raw : DEFAULTS.raw,
-      game: GAMES.some((g) => g.id === o.game) ? (o.game as GameId) : DEFAULTS.game,
-      fmt: FORMATS.some((f) => f.id === o.fmt) ? (o.fmt as FormatId) : DEFAULTS.fmt,
-      showKey: o.showKey === true,
-      perLayout: (PER_LAYOUT_CHOICES as readonly number[]).includes(o.perLayout as number) ? (o.perLayout as number) : DEFAULTS.perLayout,
-      layouts: o.layouts === 0 || (LAYOUT_COUNT_CHOICES as readonly number[]).includes(o.layouts as number) ? (o.layouts as number) : 0,
-      order: o.order === 'shuffled' ? 'shuffled' : 'written',
-      deal: whole(o.deal, 1, 1e9) ? o.deal : 1,
-      current: whole(o.current, 0, MAX_LAYOUTS - 1) ? o.current : 0,
-      rolls: Array.isArray(o.rolls) && o.rolls.length <= MAX_LAYOUTS && o.rolls.every((r) => whole(r, 0, 1e9)) ? o.rolls : [],
-    };
-  } catch {
-    return DEFAULTS;
-  }
+    const v = JSON.parse(localStorage.getItem(KEY) ?? 'null');
+    if (v && typeof v.raw === 'string' && v.details && typeof v.details === 'object') {
+      const details = { ...EMPTY };
+      for (const k of Object.keys(EMPTY) as (keyof Details)[]) if (typeof v.details[k] === 'string') details[k] = v.details[k];
+      return { raw: v.raw, details };
+    }
+  } catch { /* private window or unreadable draft: start empty */ }
+  return { raw: '', details: EMPTY };
 }
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function App() {
-  const [s, setS] = useState<State>(load);
-  const set = (patch: Partial<State>) => setS((prev) => ({ ...prev, ...patch }));
+  const [saved] = useState(load);
+  const [raw, setRaw] = useState(saved.raw);
+  const [details, setDetails] = useState(saved.details);
+  const [copied, setCopied] = useState('');
+  const box = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* private mode or full storage: just don't persist */ }
-  }, [s]);
+    try { localStorage.setItem(KEY, JSON.stringify({ raw, details })); } catch { /* storage full or blocked */ }
+  }, [raw, details]);
 
-  // Typing stays instant; the (heavier) parse and layout follow a beat behind on big pastes.
-  const raw = useDeferredValue(s.raw);
-  const parsed = useMemo(() => parsePairs(raw), [raw]);
-  const meta = META[s.game];
+  const text = useDeferredValue(raw);
+  const { rows, issues } = useMemo(() => format(text, details), [text, details]);
+  const gaps = missing(rows);
+  const chapters = new Set(rows.map((r) => [r.board, r.class, r.subject, r.chapter_no, r.chapter].join('|'))).size;
+  const topics = new Set(rows.filter((r) => r.topic || r.topic_no !== null).map((r) => [r.board, r.class, r.subject, r.chapter_no, r.chapter, r.topic_no, r.topic].join('|'))).size;
+  const name = baseName(rows);
 
-  // The questions this game can use, split into layouts of at most `perLayout`.
-  const pool = useMemo(() => usable(s.game, parsed.pairs), [s.game, parsed.pairs]);
-  const plan = useMemo(() => planLayouts(pool, s.perLayout, s.layouts, s.order, s.deal), [pool, s.perLayout, s.layouts, s.order, s.deal]);
-  const count = plan.groups.length;
-  const cur = Math.min(s.current, count - 1);
-  const sizes = useMemo(() => plan.groups.map((g) => g.length), [plan]);
-  const layoutOf = useMemo(() => firstLayouts(plan), [plan]);
+  const notes = [
+    gaps.class > 0 && `${plural(gaps.class, 'question has', 'questions have')} no class. Fill in Class above.`,
+    gaps.subject > 0 && `${plural(gaps.subject, 'question has', 'questions have')} no subject. Fill in Subject above.`,
+    gaps.chapter > 0 && `${plural(gaps.chapter, 'question has', 'questions have')} no chapter. Fill in Chapter above, or add a line such as "Chapter 1: Name".`,
+    gaps.topic > 0 && `${plural(gaps.topic, 'question has', 'questions have')} no topic. Add a line such as "Topic 1: Name" above them.`,
+  ].filter(Boolean) as string[];
 
-  const built = useMemo(() => build(s.game, plan.groups[cur], layoutSeed(cur, s.rolls[cur] ?? 0)), [s.game, plan, cur, s.rolls]);
-  const layout = useMemo(() => ({ n: cur + 1, of: count, sizes }), [cur, count, sizes]);
-  const out = useMemo(() => (built.ok ? makeOutput(built, s.fmt, s.title, { n: cur + 1, of: count }) : ''), [built, s.fmt, s.title, cur, count]);
-
-  const n = parsed.pairs.length;
-  let msg: string;
-  let tone: 'wait' | 'bad' | 'ok';
-  if (!n) { msg = 'Waiting for data. Paste your questions in Step 1.'; tone = 'wait'; }
-  else if (!built.ok) { msg = built.msg; tone = 'bad'; }
-  else {
-    const where = count > 1 ? `, layout ${cur + 1} of ${count}` : '';
-    const what = built.game === 'crossword' ? `${built.placedCount} of ${built.total} words in a ${built.cols}×${built.rows} grid`
-      : built.game === 'wordSearch' ? `${built.words.length} of ${built.total} words hidden in a ${built.size}×${built.size} grid`
-      : `${built.rows.length} questions`;
-    msg = `${meta.name} ready${where}: ${what}. Download it in Step 3.`;
-    tone = 'ok';
-  }
-
-  const done = [n > 0, true, built.ok];
-  const now = done.indexOf(false);
-  const steps: Step[] = [
-    { label: 'Data', value: n ? `${n} pairs` : 'waiting', href: '#data' },
-    { label: 'Game', value: meta.name, href: '#game' },
-    { label: 'Download', value: built.ok ? 'ready' : '—', href: '#download' },
-  ].map((x, i) => ({ ...x, done: done[i], now: i === now }));
-
-  const rearrange = () => {
-    const rolls = Array.from({ length: Math.max(s.rolls.length, cur + 1) }, (_, i) => s.rolls[i] ?? 0);
-    rolls[cur] += 1;
-    set({ rolls });
+  const copy = async (what: string, value: string) => {
+    if (!(await copyText(value))) return;
+    setCopied(what);
+    setTimeout(() => setCopied((c) => (c === what ? '' : c)), 2000);
   };
-  const downloadAll = () => {
-    const { files } = layoutFiles(s.game, meta.anchor, plan.groups, s.rolls, s.fmt, s.title);
-    saveFile(zipName(s.title, meta.anchor), makeZip(files) as Uint8Array<ArrayBuffer>, 'application/zip');
+
+  const prompt = `Open ${location.origin}${location.pathname} and follow the instructions on that page to turn the material below into questions and answers.\n\nMaterial (my notes, my questions, or just the board, class, subject and chapter):\n`;
+
+  /** Selects a line of the Questions box, so a reported problem can be fixed in place. */
+  const goTo = (line: number) => {
+    const ta = box.current;
+    if (!ta) return;
+    const lines = ta.value.split('\n');
+    const start = lines.slice(0, line - 1).reduce((n, l) => n + l.length + 1, 0);
+    ta.focus();
+    ta.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0));
+    ta.scrollTop = Math.max(0, (line - 3) * (parseFloat(getComputedStyle(ta).lineHeight) || 24));
   };
 
   return (
-    <div className="shell">
-      <Header steps={steps} msg={msg} tone={tone} />
-      <main id="top">
-        <div className="intro">
-          <h1>Turn your questions into games.</h1>
-          <p>Three steps: <b>Paste</b> → <b>Pick</b> → <b>Download</b>. Nothing to install. {CLOUD ? 'Your questions stay in this browser unless you press Save online.' : 'Your data never leaves this page.'}</p>
+    <>
+      <header className="top">
+        <div className="top-in">
+          <span className="brand"><Logo /> Question Formatter</span>
         </div>
-        <DataStep
-          title={s.title} raw={s.raw} parsed={parsed} layoutOf={layoutOf} layoutCount={count}
-          onTitle={(title) => set({ title })} onRaw={(r) => set({ raw: r })}
-          onSample={() => set({ raw: SAMPLE, title: SAMPLE_TITLE })} onClear={() => set({ raw: '' })}
-          extra={CLOUD ? <CloudPanel cfg={CLOUD} title={s.title} raw={s.raw} onLoad={(title, raw) => set({ title, raw, current: 0, rolls: [] })} /> : null}
-        />
-        <GameStep game={s.game} pairs={parsed.pairs} onPick={(game) => set({ game, current: 0 })}>
-          <LayoutOptions
-            perLayout={s.perLayout} layouts={s.layouts} order={s.order} auto={plan.auto} sizes={sizes} poolSize={pool.length}
-            onPer={(perLayout) => set({ perLayout, current: 0 })} onLayouts={(layouts) => set({ layouts, current: 0 })}
-            onOrder={(order) => set({ order, current: 0 })} onReshuffle={() => set({ deal: s.deal + 1, current: 0 })}
-          />
-        </GameStep>
-        <DownloadStep
-          built={built} pairs={parsed.pairs} title={s.title} fmt={s.fmt} showKey={s.showKey} out={out} layout={layout}
-          onPickLayout={(current) => set({ current })} onFmt={(fmt) => set({ fmt })} onToggleKey={() => set({ showKey: !s.showKey })}
-          onRearrange={rearrange} onDownloadAll={downloadAll}
-        />
-        <Tips online={!!CLOUD} />
-        <Instructions />
+      </header>
+      <main className="page">
+        <div className="intro">
+          <h1>Question Formatter</h1>
+          <p>Paste questions and answers in any format. They come out as clean rows for the question bank, ready to download.</p>
+        </div>
+
+        <div className="layout">
+          <section className="card stack" aria-labelledby="in-h">
+            <h2 id="in-h">1. Paste</h2>
+            <div className="details">
+              {FIELDS.map((f) => (
+                <div className="field" key={f.key}>
+                  <label htmlFor={`d-${f.key}`}>{f.label}</label>
+                  <input id={`d-${f.key}`} type="text" value={details[f.key]} placeholder={`e.g. ${f.hint}`} autoComplete="off"
+                    onChange={(e) => setDetails({ ...details, [f.key]: e.target.value })} />
+                </div>
+              ))}
+            </div>
+            <p className="small muted">Used for every question, unless a line in your text says otherwise, such as <code>Chapter 2: Acids</code> or <code>Topic 1: Indicators</code>.</p>
+
+            <label htmlFor="q">Questions</label>
+            <textarea id="q" ref={box} className="data" spellCheck={false} value={raw} onChange={(e) => setRaw(e.target.value)}
+              placeholder={'Any format works, for example:\n\nTopic 1: Chemical equations\nWhat is ...? | Answer\n1. What is ...? Ans: Answer\nQ. What is ...?\nAns. Answer'} />
+            <div className="row">
+              <button type="button" className="btn quiet" onClick={() => setRaw(EXAMPLE)}>Try an example</button>
+              <button type="button" className="btn quiet" onClick={() => setRaw('')} disabled={!raw}>Clear</button>
+            </div>
+
+            <div className="bot">
+              <p><b>Starting from notes?</b> Copy this prompt into ChatGPT, Gemini or Claude, add your notes (or just the class, subject and chapter), then paste its reply into Questions.</p>
+              <button type="button" className="btn small" onClick={() => copy('prompt', prompt)}>{copied === 'prompt' ? 'Copied' : 'Copy chatbot prompt'}</button>
+            </div>
+          </section>
+
+          <section className="card stack" aria-labelledby="out-h">
+            <h2 id="out-h">2. Check and download</h2>
+            <p className="summary" role="status" aria-live="polite">
+              {rows.length
+                ? <><b>{plural(rows.length, 'question')}</b> in {plural(chapters, 'chapter')} and {plural(topics, 'topic')}</>
+                : 'Nothing to download yet.'}
+            </p>
+
+            {issues.length > 0 && (
+              <div className="warn">
+                <b>{plural(issues.length, 'line needs', 'lines need')} attention</b>
+                <ul>
+                  {issues.slice(0, 50).map((x, i) => (
+                    <li key={i}><button type="button" className="linkish" onClick={() => goTo(x.line)}>Line {x.line}</button>: {x.text}</li>
+                  ))}
+                  {issues.length > 50 && <li>and {issues.length - 50} more</li>}
+                </ul>
+              </div>
+            )}
+            {notes.length > 0 && <ul className="notes">{notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+
+            {rows.length ? <RowsTable rows={rows} /> : <p className="empty">Your questions will appear here, grouped by chapter and topic.</p>}
+
+            <div className="row">
+              <button type="button" className="btn primary" disabled={!rows.length} onClick={() => download(`${name}.csv`, toCSV(rows), 'text/csv')}>Download CSV</button>
+              <button type="button" className="btn" disabled={!rows.length} onClick={() => download(`${name}.json`, toJSON(rows), 'application/json')}>Download JSON</button>
+              <button type="button" className="btn quiet" disabled={!rows.length} onClick={() => copy('sheets', toTSV(rows))}>{copied === 'sheets' ? 'Copied' : 'Copy for Sheets'}</button>
+            </div>
+            <p className="small muted">One row per question, with the columns <code>{COLUMNS.join(', ')}</code>. The CSV imports straight into a database table.</p>
+          </section>
+        </div>
       </main>
-    </div>
+    </>
+  );
+}
+
+function Logo() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F2A900" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="3" /><path d="M7 8h2M11 8h6M7 12h2M11 12h6M7 16h2M11 16h6" />
+    </svg>
   );
 }

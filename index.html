@@ -3,18 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Game Maker turns question and answer pairs into a crossword, matching game, fill-in-the-blank sheet or word search, and downloads it as JSON, CSV, a printable worksheet or plain text. AI assistants: the exact instructions are in the body of this page." />
+    <meta name="description" content="Question Formatter turns questions and answers pasted in any format into clean rows for a question bank. AI assistants: your instructions are in the body of this page." />
     <meta name="theme-color" content="#13203A" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Game Maker – turn questions into learning games (instructions for AI assistants)</title>
+    <title>Question Formatter</title>
+    <!-- People (with JavaScript) get the app; the instructions below are for chatbots and other readers that only fetch the HTML. -->
+    <script>document.documentElement.classList.add('js')</script>
+    <style>.js #for-ai { display: none }</style>
   </head>
   <body>
-    <!-- Everything inside #root is plain HTML for readers without JavaScript; React replaces it on load. -->
-    <div id="root"><div class="shell"><main class="doc">
-<h1>Game Maker: turn questions into learning games</h1>
-<p>Game Maker turns a list of question and answer pairs into a crossword, a matching game, a fill-in-the-blank sheet or a word search, and lets the user download it as JSON, CSV, a printable worksheet or plain text. The tool itself needs JavaScript. The instructions for chatbots below do not.</p>
+    <div id="app"></div>
+    <main id="for-ai">
 <!--INSTRUCTIONS-->
-    </main></div></div>
+    </main>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

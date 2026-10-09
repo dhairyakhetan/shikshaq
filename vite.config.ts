@@ -8,7 +8,7 @@ const INSTRUCTIONS = fileURLToPath(new URL('./src/instructions.html', import.met
 /**
  * Bakes src/instructions.html into index.html, so anything that fetches the page without
  * running JavaScript (chatbots, crawlers, curl) receives the instructions as plain HTML.
- * React replaces this content on load and renders the same file at the bottom of the page.
+ * In a browser a one-line script in the head hides them before the first paint, so people only see the app.
  */
 function bakeInstructions(): Plugin {
   return {
