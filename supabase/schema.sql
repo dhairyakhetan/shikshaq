@@ -11,9 +11,10 @@
 --
 -- Who can do what (sign-in is Supabase Auth with Google only; keep the Email provider off, so nobody can claim an
 -- email without proving it). Nothing at all is readable without signing in.
---   member    anyone signed in (saved in public.roles the first time they open the site): reads question_bank,
---             waiting_count(), hod_questions(); submit_batch(questions) sends a batch as themselves
---   hod       also hod_set_status(ids, new_status, reason): approve, send back, move back to waiting
+--   member    anyone signed in (saved in public.roles the first time they open the site): reads question_bank;
+--             submit_batch(questions) sends a batch as themselves
+--   hod       also the HoD desk: hod_questions(), waiting_count(), and hod_set_status(ids, new_status, reason) to
+--             approve, send back, or move back to waiting
 --   admin     the same as an HoD in the database, plus admin_people(), admin_set_role(email, role), admin_remove(email);
 --             the site also shows the admin Revise
 -- my_role() saves a new person as a member and tells the site their role, every time the site opens.
@@ -279,16 +280,24 @@ begin
   return jsonb_build_object('batch_id', bid, 'sent', sent, 'already', already, 'questions', added);
 end $$;
 
-create function public.waiting_count() returns int language sql stable security definer set search_path = ''
-as $$ select count(*)::int from public.questions where status = 'pending' $$;
-
--- The HoD desk: every question, with who sent it and when.
-create function public.hod_questions() returns jsonb
-language sql stable security definer set search_path = ''
+-- The number waiting, next to the HoD desk link. HoDs and the admin only.
+create function public.waiting_count() returns int language plpgsql stable security definer set search_path = ''
 as $$
-  select coalesce(jsonb_agg(to_jsonb(q) || jsonb_build_object('teacher', b.teacher, 'sent_at', b.sent_at) order by b.sent_at, q.question_id), '[]')
-  from public.questions q join public.batches b on b.batch_id = q.batch_id
-$$;
+begin
+  if not private.is_hod() then raise exception 'Only HoDs can see the HoD desk.'; end if;
+  return (select count(*)::int from public.questions where status = 'pending');
+end $$;
+
+-- The HoD desk: every question, with who sent it and when. HoDs and the admin only.
+create function public.hod_questions() returns jsonb language plpgsql stable security definer set search_path = ''
+as $$
+begin
+  if not private.is_hod() then raise exception 'Only HoDs can see the HoD desk.'; end if;
+  return (
+    select coalesce(jsonb_agg(to_jsonb(q) || jsonb_build_object('teacher', b.teacher, 'sent_at', b.sent_at) order by b.sent_at, q.question_id), '[]')
+    from public.questions q join public.batches b on b.batch_id = q.batch_id
+  );
+end $$;
 
 -- The HoD approves (approved), sends back with a reason (rejected) or moves back to waiting (pending).
 create function public.hod_set_status(ids text[], new_status text, reason text default '') returns jsonb
@@ -316,7 +325,7 @@ end $$;
 
 revoke execute on function public.submit_batch(text, jsonb), public.waiting_count(), public.hod_questions(),
   public.hod_set_status(text[], text, text) from public;
--- everything needs a sign-in; approving also needs an HoD or admin, people and roles need the admin (checked inside)
+-- everything needs a sign-in; the HoD desk also needs an HoD or admin, people and roles need the admin (checked inside)
 revoke execute on function public.waiting_count(), public.hod_questions(), public.my_role(), public.submit_batch(jsonb),
   public.hod_set_status(text[], text, text), public.admin_people(), public.admin_set_role(text, text), public.admin_remove(text) from public, anon;
 grant execute on function public.waiting_count(), public.hod_questions(), public.my_role(), public.submit_batch(jsonb),

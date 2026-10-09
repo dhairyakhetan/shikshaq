@@ -3,14 +3,14 @@
 This repo is for **Shikshaq** (shikshaq.in; its main code is `kushalsetha/Shikshaq`, a React + Vite + Supabase app),
 deployed at https://shikshaq-games.vercel.app. It is one page with three parts, each in its own file and independent of
 the others; they share only the question bank (`src/db.ts`) and a few things on screen (`src/ui.tsx`). Nothing shows
-until the person signs in with Google. Everyone signed in sees the formatter, the HoD desk and their profile; only
-admins see Revise, and the people-and-roles list on their profile.
+until the person signs in with Google. Everyone signed in sees the formatter and their profile; HoDs and admins
+also see the HoD desk; only admins see Revise, and the people-and-roles list on their profile.
 
 1. **Question formatter** (`/`): teachers paste questions and answers in any format and get clean rows for the question
    bank, each linked to its chapter and topic by an ID. They download them or send them to the HoD. Chatbots that fetch
    the page get hidden instructions for writing questions in the right format.
-2. **HoD desk** (`/hod/`): HoDs (and the admin) approve questions or send them back with a reason; everyone else
-   signed in can look. Approved questions are the question bank.
+2. **HoD desk** (`/hod/`, HoDs and admins only): approve questions or send them back with a reason. Approved
+   questions are the question bank.
 3. **Revise** (`/play/`, admin only for now): students pick their class, subject, chapter and the topics they studied and play puzzles made
    from the approved questions: crossword, word search, matching, fill in the blank. The puzzles are made on the device
    by the games engine (`src/games/`), with no AI, and every one is checked before it is shown.
@@ -57,7 +57,7 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5, Supabase's auth-js and postgres
 | `src/instructions.html` | Instructions for AI assistants: how to get the material, work out board/class/subject/chapter/topics, write short-answer questions, and reply in the exact format the formatter reads. Has `<pre id="format">` and `<pre id="example">`, which the tests parse. |
 | `src/formatter.tsx` | The formatter (`Formatter`), with the guide at the bottom (its link sits on the left of the header). The text (the single source of truth; not saved), the cursor line, which detail box is being typed in, undo, button feedback. Runs `format()`, decides which problems to show (`visibleIssues`), builds the notes, and handles download, copy, "Send for approval" (`sendBatch`; the batch carries the person's Google name; the note shows the new batch ID), smooth scrolling and the phone "jump to results" pill. Also `Editor`, the Questions box: a transparent textarea over an exact copy of its text that carries the red/amber underlines; the copy is kept to the same width and scroll, and the note under it explains the line the cursor is on. |
 | `src/Guide.tsx` | "How to write your questions", the guide for people at the bottom of the formatter. Board and subject code lists and limits come from the code, so they can't drift. Cards fade in as they scroll into view. |
-| `src/hod.tsx` | The HoD desk (`HodDesk`). Loads every question (`loadForHod`); approve and send back only show for HoDs and the admin (`canApprove`), and the database checks that too. Tabs Waiting / Approved / Sent back, batches grouped by chapter and topic, approve or send back per question or per batch, the reason box, rows sliding away, every change saved at once (`saveStatus`) and undoable for a few seconds, "Check for new questions" when nothing is waiting, download of the approved bank. |
+| `src/hod.tsx` | The HoD desk (`HodDesk`). Only HoDs and the admin get it (members don't see the link, and the database refuses them). Loads every question (`loadForHod`). Tabs Waiting / Approved / Sent back, batches grouped by chapter and topic, approve or send back per question or per batch, the reason box, rows sliding away, every change saved at once (`saveStatus`) and undoable for a few seconds, "Check for new questions" when nothing is waiting, download of the approved bank. |
 | `src/play.tsx` | Revise (`Revise`). Loads the `question_bank` table (`loadQuestionBank`; says so when it is empty or can't be reached), groups the questions into chapters and topics (`chaptersOf`, ordered by class, subject, chapter), Class and Subject pills, chapter cards (number, name, topics, questions) and topic chips, makes every game the chosen topics allow (only checked puzzles; a game that can't be made is greyed out), "New puzzle" (a new seed). |
 | `src/profile.tsx` | The profile page (open it from the avatar in the header): pick one of 8 avatars, name, email, role, a bio, Sign out. Avatar and bio are kept in `localStorage` (`profile:<email>`), this device only. For admins, `People` underneath: add an email with a role, change roles, remove (with undo), through `admin_set_role` and `admin_remove`. |
 | `src/playgames.tsx` | The four games, playable. Matching: tap a question, then its answer (either side first). Fill in the blank: type in the gap, Enter; "Show answer" after 2 wrong tries. Word search: drag across a word, or tap its first and last letter. Crossword: tap a square and type (a hidden input catches keys and phone keyboards), Backspace, arrows, Enter for the next clue, tap again to switch across/down, Check, Reveal word. Each ends with a "Next puzzle" banner. |
@@ -70,7 +70,7 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5, Supabase's auth-js and postgres
 
 | File | What it does |
 | --- | --- |
-| `src/db.ts` | The only thing the three parts share. The row (`Row`, `COLUMNS`, `DIFFICULTIES`) and its exports (`toCSV` with no byte-order mark, `toJSON`, `toTSV`). The bank's shapes (`Batch`, `BankQuestion`: a row plus its question ID, batch ID, `status` pending/approved/rejected and the HoD's `note`), `setStatus` and `counts` for the page's own copy. Then the database calls (Supabase sign-in and database clients, publishable key; every call carries the signed-in person's pass): `loadQuestionBank`, `waitingCount`, `sendBatch`, `loadForHod`, `saveStatus`, `amIHod`, `useLoad` (load when the page opens). Then roles (`myRole`, `ROLE_NAMES`; for admins `loadPeople`, `setPersonRole`, `removePerson`) and signing in: `useSession`, `signIn` (Google, back to the same page), `signOut`, `nameOf`. |
+| `src/db.ts` | The only thing the three parts share. The row (`Row`, `COLUMNS`, `DIFFICULTIES`) and its exports (`toCSV` with no byte-order mark, `toJSON`, `toTSV`). The bank's shapes (`Batch`, `BankQuestion`: a row plus its question ID, batch ID, `status` pending/approved/rejected and the HoD's `note`), `setStatus` and `counts` for the page's own copy. Then the database calls (Supabase sign-in and database clients, publishable key; every call carries the signed-in person's pass): `loadQuestionBank`, `waitingCount`, `sendBatch`, `loadForHod`, `saveStatus`, `useLoad` (load when the page opens). Then roles (`myRole`, `ROLE_NAMES`; for admins `loadPeople`, `setPersonRole`, `removePerson`) and signing in: `useSession`, `signIn` (Google, back to the same page), `signOut`, `nameOf`. |
 | `supabase/schema.sql` | The whole database: tables (with `roles`: admin and HoD emails), IDs, the trigger that keeps `question_bank` in step, the security rules and the functions the pages call. |
 
 ### Formatter logic
@@ -133,9 +133,10 @@ applied. Change the database only by editing that file and running the change in
 
 **Who can do what.** Row-level security is on, and the database decides, not the page. Nothing is readable without a
 Google sign-in.
-- Member (anyone signed in): read `question_bank`, `waiting_count()`, `hod_questions()` (the HoD desk list), and
-  `submit_batch(questions)` (Send: a batch as themselves, skips duplicates, gives the IDs).
-- HoD: also `hod_set_status(ids, new_status, reason)` (approve, send back, move back to waiting).
+- Member (anyone signed in): read `question_bank` and `submit_batch(questions)` (Send: a batch as themselves, skips
+  duplicates, gives the IDs).
+- HoD: also the HoD desk: `hod_questions()` (the list), `waiting_count()` and `hod_set_status(ids, new_status, reason)`
+  (approve, send back, move back to waiting).
 - Admin: also `admin_people()`, `admin_set_role(email, role)`, `admin_remove(email)`; the site shows them Revise. An
   admin can't remove themselves or take away their own admin role.
 - `my_role()` runs every time the site opens: it saves a new person as a member and returns their role.

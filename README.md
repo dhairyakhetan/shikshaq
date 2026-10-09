@@ -1,11 +1,11 @@
 # Shikshaq question bank and revision games
 
-One page with three parts; nothing shows until you sign in with Google. Everyone signed in gets the formatter, the HoD desk (only HoDs and admins can approve) and a profile page with an avatar; only admins get Revise, and manage people and roles from their profile. The parts share only the question bank (`src/db.ts`):
+One page with three parts; nothing shows until you sign in with Google. Everyone signed in gets the formatter and a profile page with an avatar; HoDs and admins also get the HoD desk; only admins get Revise, and manage people and roles from their profile. The parts share only the question bank (`src/db.ts`):
 
 | Page | For | What it does |
 | --- | --- | --- |
 | `/` **Question formatter** | Teachers | Paste questions and answers in any format, get clean rows, send them to the HoD. |
-| `/hod/` **HoD desk** | The HoD | Approve questions or send them back with a reason. Approved questions are the question bank. |
+| `/hod/` **HoD desk** | HoDs and admins | Approve questions or send them back with a reason. Approved questions are the question bank. |
 | `/play/` **Revise** | Students | Pick the topics you studied and play a crossword, word search, matching or fill-in-the-blank puzzle made from them. |
 
 All questions live in a Supabase database: every question sent, waiting, approved or sent back, and a clean

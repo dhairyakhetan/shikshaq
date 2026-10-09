@@ -150,7 +150,7 @@ export async function loadQuestionBank(): Promise<BankQuestion[]> {
   }
 }
 
-/** The number in the header: questions waiting for the HoD. */
+/** The number in the header: questions waiting for the HoD. HoDs and the admin only. */
 export const waitingCount = () => ask<number>(supabase.rpc('waiting_count'));
 
 /**
@@ -164,7 +164,7 @@ export async function sendBatch(rows: Row[]) {
   return { batchId: r.batch_id, sent: r.sent, already: r.already, noId: rows.length - ready.length };
 }
 
-/** The HoD desk: every question, with its batch. */
+/** The HoD desk: every question, with its batch. HoDs and the admin only. */
 export async function loadForHod(): Promise<Bank> {
   const rows = await ask<DbQuestion[]>(supabase.rpc('hod_questions'));
   const batches = new Map<string, Batch>();
@@ -177,7 +177,7 @@ export const saveStatus = (ids: string[], status: Status, reason = '') =>
   ask<{ question_id: string }[]>(supabase.rpc('hod_set_status', { ids, new_status: status, reason }));
 
 /**
- * What the signed-in person may do: member (send questions, see the HoD desk), hod (also approve) or admin (also Revise,
+ * What the signed-in person may do: member (format and send questions), hod (also the HoD desk) or admin (also Revise,
  * and people and roles). Asked every time the site opens, so a change the admin makes shows on the person's next refresh.
  * The database also saves a new person as a member.
  */

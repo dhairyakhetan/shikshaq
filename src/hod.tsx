@@ -1,8 +1,7 @@
 /**
  * The HoD desk: teachers' batches wait here until the HoD approves each question or sends it back with a reason the
  * teacher sees. Approved questions go into the question bank the revision games use. Works on its own: it only reads and
- * writes the database (src/db.ts). Everyone signed in can see it; only HoDs and the admin can approve or send back,
- * and the database checks that too.
+ * writes the database (src/db.ts). Only HoDs and the admin get it, and the database checks that too.
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { counts, loadForHod, saveStatus, setStatus, toCSV, toJSON, type Bank, type BankQuestion, type Status } from './db';
@@ -25,8 +24,8 @@ function Gate({ children }: { children: ReactNode }) {
   );
 }
 
-/** `canApprove`: an HoD or the admin (others see the desk but can't change it). `onChange` recounts the header's number. */
-export function HodDesk({ canApprove, onChange }: { canApprove: boolean; onChange: () => void }) {
+/** `onChange` recounts the header's number. */
+export function HodDesk({ onChange }: { onChange: () => void }) {
   const [loaded, setLoaded] = useState<{ data?: Bank; error?: string }>({});
   const load = useCallback(() => {
     setLoaded((l) => ({ data: l.data }));
@@ -103,7 +102,6 @@ export function HodDesk({ canApprove, onChange }: { canApprove: boolean; onChang
   ) : null);
 
   const rowActions = (q: BankQuestion) => {
-    if (!canApprove) return q.status === 'rejected' ? <div className="acts"><p className="reason"><b>Sent back:</b> {q.note}</p></div> : null;
     if (q.status === 'pending') {
       return back?.where === q.id ? whyBox(q.id, [q.id]) : (
         <div className="acts">
@@ -130,7 +128,6 @@ export function HodDesk({ canApprove, onChange }: { canApprove: boolean; onChang
       <div className="intro enter">
         <h1>Approve questions</h1>
         <p>Questions teachers send from the formatter wait here. Only approved questions go into the question bank and the games.</p>
-        {!canApprove && <p className="small muted">Only HoDs can approve or send back questions. You can see where every question is, and why any was sent back.</p>}
       </div>
       {saveError && <p className="sent-note warn" role="alert">{saveError}</p>}
 
@@ -149,7 +146,7 @@ export function HodDesk({ canApprove, onChange }: { canApprove: boolean; onChang
               <h2>{plural(qs.length, 'question')} from {b.by}</h2>
               <p className="small muted">Sent {when(b.at)}</p>
             </div>
-            {canApprove && back?.where !== `batch:${b.id}` && (
+            {back?.where !== `batch:${b.id}` && (
               <div className="row">
                 <button type="button" className="btn small ok" onClick={() => act(qs.map((q) => q.id), 'approved')}><CheckIcon /> Approve all {qs.length}</button>
                 <button type="button" className="btn small quiet" onClick={() => { setBack({ where: `batch:${b.id}`, ids: qs.map((q) => q.id) }); setReason(''); }}>Send all back</button>

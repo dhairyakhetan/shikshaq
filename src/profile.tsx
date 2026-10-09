@@ -126,7 +126,7 @@ function People({ me }: { me: string }) {
     <section className="card stack people enter" aria-labelledby="people-h" style={{ animationDelay: '60ms' }}>
       <div>
         <h2 id="people-h">People and roles</h2>
-        <p className="small muted">Everyone who signs in is a member: they can send questions and see the HoD desk. HoDs can also approve questions. Admins can also see Revise and change roles. A change shows the next time the person opens or refreshes the site.</p>
+        <p className="small muted">Everyone who signs in is a member: they can format questions and send them. HoDs also get the HoD desk, to approve questions. Admins also get Revise and can change roles. A change shows the next time the person opens or refreshes the site.</p>
       </div>
 
       <form className="row add-person" onSubmit={(e) => { e.preventDefault(); if (email.trim()) add(); }}>

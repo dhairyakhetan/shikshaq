@@ -19,7 +19,8 @@ function scrollToEl(el: HTMLElement | null) {
 }
 
 /** `teacher` is the signed-in person's name; `onSent` tells the header to count the waiting questions again. */
-export function Formatter({ teacher, onSent }: { teacher: string; onSent: () => void }) {
+/** `reviewer`: an HoD or the admin, who can open the HoD desk. */
+export function Formatter({ teacher, reviewer, onSent }: { teacher: string; reviewer: boolean; onSent: () => void }) {
   const [raw, setRaw] = useState('');
   const [done, setDone] = useState('');
   const [caret, setCaret] = useState(0);
@@ -232,7 +233,7 @@ export function Formatter({ teacher, onSent }: { teacher: string; onSent: () => 
 
             <form className="send" onSubmit={(e) => { e.preventDefault(); send(); }}>
               <h3>3. Send for approval</h3>
-              <p className="small muted">Your HoD checks the questions on the HoD desk. Only approved ones go into the question bank and the games.</p>
+              <p className="small muted">Your HoD checks the questions. Only approved ones go into the question bank and the games.</p>
               <div className="row signed-in">
                 <button type="submit" className={`btn dark${done === 'send' ? ' is-done' : ''}`} disabled={!ready || sending}>
                   <ActionIcon done={done === 'send'}><SendIcon /></ActionIcon>{sending ? 'Sending…' : ready ? `Send ${plural(ready, 'question')}` : 'Send'}
@@ -244,7 +245,7 @@ export function Formatter({ teacher, onSent }: { teacher: string; onSent: () => 
                 <p className={`sent-note ${sent.sent ? 'ok' : 'warn'}`} key={JSON.stringify(sent)}>
                   {sent.sent ? <>Sent {plural(sent.sent, 'question')} to the HoD as batch <b>{sent.batchId}</b>. </> : 'Nothing new to send. '}
                   {sent.already > 0 && <>{plural(sent.already, 'question was', 'questions were')} already sent, so {sent.already === 1 ? 'it was' : 'they were'} skipped. </>}
-                  {sent.sent > 0 && <Link className="linkish" href="/hod/">Open the HoD desk</Link>}
+                  {reviewer && sent.sent > 0 && <Link className="linkish" href="/hod/">Open the HoD desk</Link>}
                 </p>
               )}
               {sendError && <p className="sent-note warn" role="alert">Couldn't send: {sendError}</p>}

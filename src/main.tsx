@@ -1,7 +1,7 @@
 /**
  * The whole site, as one page. Nothing shows until the person signs in with Google. Then the database says their role
- * (and saves a new person as a member): everyone signed in gets the formatter, the HoD desk (only HoDs and admins can
- * approve there) and their profile; only admins get Revise, whose games are downloaded only when it is opened.
+ * (and saves a new person as a member): everyone signed in gets the formatter and their profile; HoDs and admins also get
+ * the HoD desk; only admins get Revise, whose games are downloaded only when it is opened.
  * Moving between the parts doesn't reload the page: the header stays and the parts crossfade. A part stays open once
  * visited, so its text, puzzle or list is still there on the way back.
  */
@@ -33,20 +33,21 @@ function App() {
     setRole({});
     if (who) myRole().then((r) => setRole({ role: r }), (e: Error) => setRole({ error: e.message }));
   }, [who]);
-  // the number of questions waiting, in the header: asked once signed in, and again after a send or an approval
+  const reviewer = role.role === 'hod' || role.role === 'admin';
+  // the number of questions waiting, next to the HoD desk link: asked once the role is known, and after a send or an approval
   const [waiting, setWaiting] = useState(0);
-  const recount = useCallback(() => { waitingCount().then(setWaiting, () => {}); }, []);
-  useEffect(() => { if (who) recount(); }, [who, recount]);
+  const recount = useCallback(() => { if (reviewer) waitingCount().then(setWaiting, () => {}); }, [reviewer]);
+  useEffect(recount, [recount]);
   const path = useRoute();
   const [profile, setProfile] = useProfile(session?.user.email ?? '');
   const [opened, setOpened] = useState<Set<Section>>(new Set());
 
-  const pages: Section[] = role.role === 'admin' ? ['formatter', 'hod', 'play'] : ['formatter', 'hod'];
+  const pages: Section[] = role.role === 'admin' ? ['formatter', 'hod', 'play'] : reviewer ? ['formatter', 'hod'] : ['formatter'];
   const wanted = partOf(path);
   const here = pages.includes(wanted) || wanted === 'profile' ? wanted : 'formatter';
   useEffect(() => {
     if (!role.role) return;
-    if (here !== wanted) history.replaceState(null, '', '/'); // Revise is only for the admin
+    if (here !== wanted) history.replaceState(null, '', '/'); // a part this person can't open
     setOpened((o) => (o.has(here) ? o : new Set(o).add(here)));
   }, [here, wanted, role.role]);
 
@@ -57,7 +58,7 @@ function App() {
         <div className="signin-card enter">
           <Logo />
           <h1>Shikshaq question bank</h1>
-          <p>Sign in to send questions for approval and to see the HoD desk.</p>
+          <p>Sign in to format your questions and send them for approval.</p>
           {role.error && <p className="sent-note warn" role="alert">Couldn't check your sign-in: {role.error}</p>}
           {role.error
             ? <button type="button" className="btn quiet" onClick={() => signOut()}>Sign out and try again</button>
@@ -68,8 +69,8 @@ function App() {
   }
 
   const parts: Record<Section, () => ReactNode> = {
-    formatter: () => <Formatter teacher={nameOf(session)} onSent={recount} />,
-    hod: () => <HodDesk canApprove={role.role === 'hod' || role.role === 'admin'} onChange={recount} />,
+    formatter: () => <Formatter teacher={nameOf(session)} reviewer={reviewer} onSent={recount} />,
+    hod: () => <HodDesk onChange={recount} />,
     play: () => <Suspense fallback={<main className="page"><p className="empty">Loading the games…</p></main>}><Revise /></Suspense>,
     profile: () => <ProfilePage name={nameOf(session)} email={session.user.email ?? ''} role={role.role ?? 'member'} profile={profile} onChange={setProfile} onSignOut={() => signOut()} />,
   };
