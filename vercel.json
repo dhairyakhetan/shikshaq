@@ -40,5 +40,15 @@
       "destination": "/hod/",
       "permanent": false
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/hod/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/play/",
+      "destination": "/index.html"
+    }
   ]
 }

@@ -9,13 +9,14 @@
 --                (T00 when the question has no topic). Numbers are given in order and never reused.
 --   batch_id     B20261009-03 = the 3rd batch sent on 9 October 2026 (India time)
 --
--- Who can do what:
---   anyone           reads question_bank, waiting_count() (the number in the header), hod_questions() (the HoD desk list)
---   signed in        submit_batch(questions): sends a batch, as themselves (name and email from their Google account)
---   HoDs             hod_set_status(ids, new_status, reason): approve, send back, move back to waiting. An HoD is
---                    someone signed in with Google whose email is in public.hods. Add one with:
---                      insert into public.hods (email) values ('name@example.com');
--- Sign-in is Supabase Auth with Google only (turn the Email provider off, so nobody can claim an email unchecked).
+-- Who can do what (sign-in is Supabase Auth with Google only; keep the Email provider off, so nobody can claim an
+-- email without proving it). Nothing at all is readable without signing in.
+--   teacher   anyone signed in: reads question_bank, waiting_count(), hod_questions(); submit_batch(questions) sends a
+--             batch as themselves (name and email from their Google account)
+--   hod       also hod_set_status(ids, new_status, reason): approve, send back, move back to waiting
+--   admin     the same as an HoD in the database; the site also shows them Revise
+-- my_role() tells the site which one the signed-in person is. Roles live in public.roles; add an HoD with:
+--   insert into public.roles (email, role) values ('name@example.com', 'hod');
 
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
@@ -24,20 +25,25 @@ revoke all on schema private from public, anon, authenticated;
 create function private.norm(t text) returns text language sql immutable set search_path = ''
 as $$ select lower(regexp_replace(btrim(t), '\s+', ' ', 'g')) $$;
 
--- the HoDs, by email (not readable through the API)
-create table public.hods (
+-- admins and HoDs, by email (not readable through the API); everyone else signed in is a teacher
+create table public.roles (
   email text primary key check (email = lower(email)),
+  role text not null check (role in ('admin', 'hod')),
   added_at timestamptz not null default now()
 );
 
-create function private.is_hod() returns boolean language sql stable security definer set search_path = ''
+-- the signed-in person's role: admin, hod or teacher; null when not signed in with Google
+create function private.role() returns text language sql stable security definer set search_path = ''
 as $$
-  select coalesce((auth.jwt() -> 'app_metadata' -> 'providers') ? 'google', false)
-     and exists (select 1 from public.hods h where h.email = lower(auth.jwt() ->> 'email'))
+  select case
+    when auth.uid() is null or not coalesce((auth.jwt() -> 'app_metadata' -> 'providers') ? 'google', false) then null
+    else coalesce((select r.role from public.roles r where r.email = lower(auth.jwt() ->> 'email')), 'teacher')
+  end
 $$;
-
-create function public.am_i_hod() returns boolean language sql stable security definer set search_path = ''
-as $$ select private.is_hod() $$;
+create function private.is_hod() returns boolean language sql stable security definer set search_path = ''
+as $$ select coalesce(private.role() in ('hod', 'admin'), false) $$;
+create function public.my_role() returns text language sql stable security definer set search_path = ''
+as $$ select private.role() $$;
 
 -- ---------------------------------------------------------------- tables
 
@@ -148,13 +154,13 @@ create trigger questions_to_bank after insert or update on public.questions
 
 -- ---------------------------------------------------------------- who can see what
 
-alter table public.hods enable row level security;
+alter table public.roles enable row level security;
 alter table public.batches enable row level security;
 alter table public.questions enable row level security;
 alter table public.question_bank enable row level security;
-revoke all on public.hods, public.batches, public.questions from anon, authenticated;
+revoke all on public.roles, public.batches, public.questions from anon, authenticated;
 revoke insert, update, delete, truncate, references, trigger on public.question_bank from anon, authenticated;
-create policy "Anyone can read the question bank" on public.question_bank for select to anon, authenticated using (true);
+create policy "Signed-in people can read the question bank" on public.question_bank for select to authenticated using (true);
 
 -- ---------------------------------------------------------------- what the website calls
 
@@ -258,7 +264,8 @@ end $$;
 
 revoke execute on function public.submit_batch(text, jsonb), public.waiting_count(), public.hod_questions(),
   public.hod_set_status(text[], text, text) from public;
--- reading is public; sending needs a sign-in; approving needs an HoD (checked inside hod_set_status)
-grant execute on function public.waiting_count(), public.hod_questions() to anon, authenticated;
-revoke execute on function public.submit_batch(jsonb), public.hod_set_status(text[], text, text), public.am_i_hod() from public, anon;
-grant execute on function public.submit_batch(jsonb), public.hod_set_status(text[], text, text), public.am_i_hod() to authenticated;
+-- everything needs a sign-in; approving also needs an HoD or admin (checked inside hod_set_status)
+revoke execute on function public.waiting_count(), public.hod_questions(), public.my_role(), public.submit_batch(jsonb),
+  public.hod_set_status(text[], text, text) from public, anon;
+grant execute on function public.waiting_count(), public.hod_questions(), public.my_role(), public.submit_batch(jsonb),
+  public.hod_set_status(text[], text, text) to authenticated;

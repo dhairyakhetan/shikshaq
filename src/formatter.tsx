@@ -1,12 +1,10 @@
 /** The question formatter: teachers paste questions in any format, check them, and send them for approval or download them. */
-import { Fragment, StrictMode, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { createRoot } from 'react-dom/client';
-import './styles.css';
+import { Fragment, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { checkDetail, DETAIL_KEYS, detailLine, detailsId, LABEL, readDetails, standardDetail, writeDetail, type DetailKey } from './details';
-import { COLUMNS, nameOf, sendBatch, signIn, signOut, toCSV, toJSON, toTSV, useLoad, useSession, waitingCount } from './db';
+import { COLUMNS, sendBatch, toCSV, toJSON, toTSV } from './db';
 import { baseName, EXAMPLE, format, lineLevels, missing, visibleIssues, type Issue } from './format';
 import { Guide } from './Guide';
-import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon, GoogleIcon, RowsTable, SectionHeader, SendIcon, useUndo } from './ui';
+import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon, Link, RowsTable, SendIcon, useUndo } from './ui';
 
 const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: 'Science', chapter: '1: Chemical Reactions' };
 
@@ -20,15 +18,14 @@ function scrollToEl(el: HTMLElement | null) {
   el.focus({ preventScroll: true });
 }
 
-function Formatter() {
-  const waiting = useLoad(waitingCount);
+/** `teacher` is the signed-in person's name; `onSent` tells the header to count the waiting questions again. */
+export function Formatter({ teacher, onSent }: { teacher: string; onSent: () => void }) {
   const [raw, setRaw] = useState('');
   const [done, setDone] = useState('');
   const [caret, setCaret] = useState(0);
   /** Bumped when the whole text is replaced (paste, example, clear), so the table plays its entrance again. */
   const [batch, setBatch] = useState(0);
   const { offer, toast } = useUndo();
-  const session = useSession();
   const [sent, setSent] = useState<{ batchId: string | null; sent: number; noId: number; already: number } | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
@@ -115,7 +112,7 @@ function Formatter() {
     try {
       const result = await sendBatch(rows);
       setSent(result);
-      if (result.sent) { flash('send'); waiting.reload(); }
+      if (result.sent) { flash('send'); onSent(); }
     } catch (e) {
       setSendError((e as Error).message);
     } finally {
@@ -140,10 +137,10 @@ function Formatter() {
 
   return (
     <>
-      <SectionHeader here="formatter" waiting={waiting.data ?? 0}>
-        <button type="button" className="top-link" onClick={() => scrollToEl(document.getElementById('guide'))}>How to write<span className="wide-only"> questions</span></button>
-      </SectionHeader>
-      <main className="page">
+      <main className="page with-guide">
+        {/* the guide sits beside the formatter on wide screens, so it's there without scrolling */}
+        <aside className="guide-side"><Guide /></aside>
+        <div className="main-col">
         <div className="intro enter">
           <h1>Question Formatter</h1>
           <p>Paste questions and answers in any format. They come out as clean rows for the question bank, each linked to its chapter by an ID.</p>
@@ -239,24 +236,18 @@ function Formatter() {
             <form className="send" onSubmit={(e) => { e.preventDefault(); send(); }}>
               <h3>3. Send for approval</h3>
               <p className="small muted">Your HoD checks the questions on the HoD desk. Only approved ones go into the question bank and the games.</p>
-              {session === null ? (
-                <div className="row">
-                  <button type="button" className="btn dark" onClick={() => signIn()}><GoogleIcon /> Sign in with Google to send</button>
-                </div>
-              ) : (
-                <div className="row signed-in">
-                  <button type="submit" className={`btn dark${done === 'send' ? ' is-done' : ''}`} disabled={!ready || !session || sending}>
-                    <ActionIcon done={done === 'send'}><SendIcon /></ActionIcon>{sending ? 'Sending…' : ready ? `Send ${plural(ready, 'question')}` : 'Send'}
-                  </button>
-                  {session && <p className="small muted">Sending as <b>{nameOf(session)}</b>. <button type="button" className="linkish" onClick={() => { signOut(); setSent(null); }}>Not you?</button></p>}
-                </div>
-              )}
+              <div className="row signed-in">
+                <button type="submit" className={`btn dark${done === 'send' ? ' is-done' : ''}`} disabled={!ready || sending}>
+                  <ActionIcon done={done === 'send'}><SendIcon /></ActionIcon>{sending ? 'Sending…' : ready ? `Send ${plural(ready, 'question')}` : 'Send'}
+                </button>
+                <p className="small muted">Sending as <b>{teacher}</b>.</p>
+              </div>
               {rows.length > ready && <p className="small muted">{plural(rows.length - ready, 'question has', 'questions have')} no chapter ID and can't be sent yet. Fill in the boxes above.</p>}
               {sent && (
                 <p className={`sent-note ${sent.sent ? 'ok' : 'warn'}`} key={JSON.stringify(sent)}>
                   {sent.sent ? <>Sent {plural(sent.sent, 'question')} to the HoD as batch <b>{sent.batchId}</b>. </> : 'Nothing new to send. '}
                   {sent.already > 0 && <>{plural(sent.already, 'question was', 'questions were')} already sent, so {sent.already === 1 ? 'it was' : 'they were'} skipped. </>}
-                  {sent.sent > 0 && <a className="linkish" href="/hod/">Open the HoD desk</a>}
+                  {sent.sent > 0 && <Link className="linkish" href="/hod/">Open the HoD desk</Link>}
                 </p>
               )}
               {sendError && <p className="sent-note warn" role="alert">Couldn't send: {sendError}</p>}
@@ -264,7 +255,7 @@ function Formatter() {
           </section>
         </div>
 
-        <Guide />
+        </div>
       </main>
 
       <div className="floating" aria-live="polite">
@@ -386,9 +377,3 @@ async function copyText(text: string): Promise<boolean> {
     return ok;
   }
 }
-
-createRoot(document.getElementById('app')!).render(
-  <StrictMode>
-    <Formatter />
-  </StrictMode>,
-);

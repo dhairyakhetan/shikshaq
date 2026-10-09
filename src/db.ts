@@ -96,8 +96,8 @@ export const counts = (bank: Bank): Record<Status, number> => ({
 
 /**
  * Supabase, with the project's publishable key, which is made to be public: the database's own rules decide what each
- * person may do. Anyone can read the question bank, the HoD desk list and the waiting count. Sending needs a Google
- * sign-in; approving and sending back need an HoD (an email on the database's HoD list).
+ * person may do. Everything needs a Google sign-in. Anyone signed in can read and send questions; approving and sending
+ * back need an HoD or the admin (an email in the database's roles table).
  */
 const supabase = createClient('https://dfytzracuyiitlqeqszm.supabase.co', 'sb_publishable__njgrg5F1tWacX_O6uSJNA_jSE1ucYg', {
   auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
@@ -161,8 +161,9 @@ export async function loadForHod(): Promise<Bank> {
 export const saveStatus = (ids: string[], status: Status, reason = '') =>
   ask<{ question_id: string }[]>(supabase.rpc('hod_set_status', { ids, new_status: status, reason }));
 
-/** Is the signed-in person on the HoD list? */
-export const amIHod = () => ask<boolean>(supabase.rpc('am_i_hod'));
+/** What the signed-in person may do: admin (everything, and Revise), hod (approve) or teacher (send). */
+export type Role = 'admin' | 'hod' | 'teacher';
+export const myRole = () => ask<Role | null>(supabase.rpc('my_role'));
 
 /** Loads something when the page opens. `reload` fetches again and keeps showing the old data until the new arrives. */
 export function useLoad<T>(load: () => Promise<T>) {

@@ -3,13 +3,10 @@
  * class, subject and chapter, and the topics they studied, and a puzzle is made from those questions on their device by src/games, which
  * checks every puzzle before it is shown. Works on its own: no formatter or HoD desk code.
  */
-import { StrictMode, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import './styles.css';
-import { loadQuestionBank, useLoad, waitingCount, type BankQuestion } from './db';
+import { useMemo, useState } from 'react';
+import { loadQuestionBank, useLoad, type BankQuestion } from './db';
 import { GAME_TYPES, makeGame, seedOf, type Game, type GameType, type Item } from './games';
 import { GameView } from './playgames';
-import { SectionHeader } from './ui';
 
 const NAMES: Record<GameType, string> = { crossword: 'Crossword', wordsearch: 'Word search', matching: 'Matching', fill: 'Fill in the blank' };
 
@@ -40,9 +37,8 @@ function chaptersOf(questions: BankQuestion[]): Chapter[] {
   }).sort((a, b) => (a.cls ?? 0) - (b.cls ?? 0) || a.subject.localeCompare(b.subject) || (a.no ?? 0) - (b.no ?? 0));
 }
 
-function Revise() {
+export function Revise() {
   const bank = useLoad(loadQuestionBank);
-  const waiting = useLoad(waitingCount);
   const chapters = useMemo(() => chaptersOf(bank.data ?? []), [bank.data]);
   const [pick, setPickState] = useState({ chapter: '', topics: [] as string[] });
   const [round, setRound] = useState(0);
@@ -80,7 +76,6 @@ function Revise() {
 
   return (
     <>
-      <SectionHeader here="play" waiting={waiting.data ?? 0} />
       <main className="page play">
         <div className="intro enter">
           <h1>Revise</h1>
@@ -171,9 +166,3 @@ function Revise() {
     </>
   );
 }
-
-createRoot(document.getElementById('app')!).render(
-  <StrictMode>
-    <Revise />
-  </StrictMode>,
-);

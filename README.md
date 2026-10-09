@@ -1,6 +1,6 @@
 # Shikshaq question bank and revision games
 
-Three separate parts, each its own page. They work without each other and share only the question bank (`src/db.ts`):
+One page with three parts; nothing shows until you sign in with Google. Everyone signed in gets the formatter and the HoD desk (only HoDs and the admin can approve); only the admin gets Revise. The parts share only the question bank (`src/db.ts`):
 
 | Page | For | What it does |
 | --- | --- | --- |

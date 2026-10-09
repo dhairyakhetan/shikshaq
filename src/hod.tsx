@@ -1,51 +1,38 @@
 /**
  * The HoD desk: teachers' batches wait here until the HoD approves each question or sends it back with a reason the
  * teacher sees. Approved questions go into the question bank the revision games use. Works on its own: it only reads and
- * writes the database (src/db.ts). Only HoDs can use it: people sign in with Google, and the database checks that their
- * email is on its HoD list.
+ * writes the database (src/db.ts). Everyone signed in can see it; only HoDs and the admin can approve or send back,
+ * and the database checks that too.
  */
-import { StrictMode, useCallback, useEffect, useState, type ReactNode } from 'react';
-import { createRoot } from 'react-dom/client';
-import './styles.css';
-import { amIHod, counts, loadForHod, nameOf, saveStatus, setStatus, signIn, signOut, toCSV, toJSON, useLoad, useSession, waitingCount, type Bank, type BankQuestion, type Status } from './db';
-import { CheckIcon, DownloadIcon, GoogleIcon, RowsTable, SectionHeader, useUndo } from './ui';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { counts, loadForHod, saveStatus, setStatus, toCSV, toJSON, type Bank, type BankQuestion, type Status } from './db';
+import { CheckIcon, DownloadIcon, Link, RowsTable, useUndo } from './ui';
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const TABS: { key: Status; label: string }[] = [{ key: 'pending', label: 'Waiting' }, { key: 'approved', label: 'Approved' }, { key: 'rejected', label: 'Sent back' }];
 
-/** The page before the desk opens: the title, then a message or a sign-in button. */
-function Gate({ waiting, children }: { waiting: number; children: ReactNode }) {
+/** The page while the questions load, or when they can't. */
+function Gate({ children }: { children: ReactNode }) {
   return (
-    <>
-      <SectionHeader here="hod" waiting={waiting} />
-      <main className="page review">
-        <div className="intro enter">
-          <h1>Approve questions</h1>
-          <p>Questions teachers send from the formatter wait here. Only approved questions go into the question bank and the games.</p>
-        </div>
-        <div className="empty-state enter" aria-live="polite">{children}</div>
-      </main>
-    </>
+    <main className="page review">
+      <div className="intro enter">
+        <h1>Approve questions</h1>
+        <p>Questions teachers send from the formatter wait here. Only approved questions go into the question bank and the games.</p>
+      </div>
+      <div className="empty-state enter" aria-live="polite">{children}</div>
+    </main>
   );
 }
 
-function HodDesk() {
-  const session = useSession();
-  const [hod, setHod] = useState<boolean | undefined>(undefined);
-  const who = session === undefined ? undefined : session?.user.id ?? null;
-  useEffect(() => {
-    setHod(undefined);
-    if (who === null) setHod(false);
-    else if (who) amIHod().then(setHod, () => setHod(false));
-  }, [who]);
-  const waiting = useLoad(waitingCount);
+/** `canApprove`: an HoD or the admin (others see the desk but can't change it). `onChange` recounts the header's number. */
+export function HodDesk({ canApprove, onChange }: { canApprove: boolean; onChange: () => void }) {
   const [loaded, setLoaded] = useState<{ data?: Bank; error?: string }>({});
   const load = useCallback(() => {
     setLoaded((l) => ({ data: l.data }));
     loadForHod().then((data) => setLoaded({ data }), (e: Error) => setLoaded((l) => ({ data: l.data, error: e.message })));
   }, []);
-  useEffect(() => { if (hod) load(); }, [hod, load]);
+  useEffect(load, [load]);
   const [edited, setBank] = useState<Bank | null>(null); // the page's copy once the HoD changes something
   const bank = edited ?? loaded.data;
   const [saveError, setSaveError] = useState('');
@@ -62,26 +49,9 @@ function HodDesk() {
   };
   const refresh = () => { setBank(null); load(); };
 
-  if (session === undefined || (session && hod === undefined)) return <Gate waiting={waiting.data ?? 0}><p>Checking your sign-in…</p></Gate>;
-  if (!session) {
-    return (
-      <Gate waiting={waiting.data ?? 0}>
-        <p><b>Sign in to approve questions.</b> Only HoDs can approve or send back questions.</p>
-        <button type="button" className="btn primary" onClick={() => signIn()}><GoogleIcon /> Sign in with Google</button>
-      </Gate>
-    );
-  }
-  if (!hod) {
-    return (
-      <Gate waiting={waiting.data ?? 0}>
-        <p>You're signed in as <b>{session.user.email}</b>, which isn't on the HoD list. Ask for your email to be added.</p>
-        <button type="button" className="btn quiet" onClick={() => signOut()}>Sign out</button>
-      </Gate>
-    );
-  }
   if (!bank) {
     return (
-      <Gate waiting={waiting.data ?? 0}>
+      <Gate>
         {loaded.error ? (
           <>
             <p><b>Couldn't load the questions.</b> {loaded.error}</p>
@@ -106,14 +76,14 @@ function HodDesk() {
       setBank((b) => setStatus(b ?? before, ids, status, note, new Date().toISOString()));
       setLeaving(new Set());
     }, 220);
-    saveStatus(ids, status, note).catch(failed);
+    saveStatus(ids, status, note).then(onChange, failed);
     const did = status === 'approved' ? 'approved' : status === 'rejected' ? 'sent back' : 'moved to waiting';
     offer(`${plural(ids.length, 'question')} ${did}`, () => {
       setBank(before);
       // put each question back as it was (questions sent back keep their own reason)
       const groups = new Map<string, BankQuestion[]>();
       for (const q of old) groups.set(`${q.status}\u0000${q.note}`, [...(groups.get(`${q.status}\u0000${q.note}`) ?? []), q]);
-      Promise.all([...groups.values()].map((qs) => saveStatus(qs.map((q) => q.id), qs[0].status, qs[0].note))).catch(failed);
+      Promise.all([...groups.values()].map((qs) => saveStatus(qs.map((q) => q.id), qs[0].status, qs[0].note))).then(onChange, failed);
     });
   };
 
@@ -133,6 +103,7 @@ function HodDesk() {
   ) : null);
 
   const rowActions = (q: BankQuestion) => {
+    if (!canApprove) return q.status === 'rejected' ? <div className="acts"><p className="reason"><b>Sent back:</b> {q.note}</p></div> : null;
     if (q.status === 'pending') {
       return back?.where === q.id ? whyBox(q.id, [q.id]) : (
         <div className="acts">
@@ -156,12 +127,11 @@ function HodDesk() {
 
   return (
     <>
-    <SectionHeader here="hod" waiting={c.pending} />
     <main className="page review">
       <div className="intro enter">
         <h1>Approve questions</h1>
         <p>Questions teachers send from the formatter wait here. Only approved questions go into the question bank and the games.</p>
-        <p className="small muted">Signed in as <b>{nameOf(session)}</b> (HoD). <button type="button" className="linkish" onClick={() => signOut()}>Sign out</button></p>
+        {!canApprove && <p className="small muted">Only HoDs can approve or send back questions. You can see where every question is, and why any was sent back.</p>}
       </div>
       {saveError && <p className="sent-note warn" role="alert">{saveError}</p>}
 
@@ -180,7 +150,7 @@ function HodDesk() {
               <h2>{plural(qs.length, 'question')} from {b.by}</h2>
               <p className="small muted">Sent {when(b.at)}</p>
             </div>
-            {back?.where !== `batch:${b.id}` && (
+            {canApprove && back?.where !== `batch:${b.id}` && (
               <div className="row">
                 <button type="button" className="btn small ok" onClick={() => act(qs.map((q) => q.id), 'approved')}><CheckIcon /> Approve all {qs.length}</button>
                 <button type="button" className="btn small quiet" onClick={() => { setBack({ where: `batch:${b.id}`, ids: qs.map((q) => q.id) }); setReason(''); }}>Send all back</button>
@@ -195,7 +165,7 @@ function HodDesk() {
           <p><b>Nothing is waiting.</b> Questions teachers send from the formatter appear here.</p>
           <div className="row">
             <button type="button" className="btn primary" onClick={refresh}>Check for new questions</button>
-            <a className="btn quiet" href="/">Go to the formatter</a>
+            <Link className="btn quiet" href="/">Go to the formatter</Link>
           </div>
         </div>
       ))}
@@ -233,9 +203,3 @@ function save(name: string, text: string, mime: string) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
-
-createRoot(document.getElementById('app')!).render(
-  <StrictMode>
-    <HodDesk />
-  </StrictMode>,
-);

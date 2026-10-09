@@ -1,5 +1,6 @@
-/** What the three parts share on screen: the header, the grouped table of rows, the undo bar and icons. */
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+/** What the three parts share on screen: moving between them, the header, the grouped table of rows, the undo bar and icons. */
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import type { Row } from './db';
 
 const base = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true } as const;
@@ -94,29 +95,65 @@ export function useUndo() {
   return { offer, toast };
 }
 
-const SECTIONS = [
+export const SECTIONS = [
   { key: 'formatter', name: 'Question formatter', link: 'Formatter', href: '/' },
   { key: 'hod', name: 'HoD desk', link: 'HoD desk', href: '/hod/' },
   { key: 'play', name: 'Revise', link: 'Revise', href: '/play/' },
 ] as const;
 export type Section = (typeof SECTIONS)[number]['key'];
 
-/**
- * The header. The three parts are separate pages that work without each other; in Shikshaq they will sit in different
- * places (teachers, HoDs, students). Here the header links them, and shows how many questions are waiting.
- */
-export function SectionHeader({ here, waiting = 0, children }: { here: Section; waiting?: number; children?: ReactNode }) {
+// ---------------------------------------------------------------- moving between the parts (one page, no reloads)
+
+let onGo: ((path: string) => void) | null = null;
+
+/** Changes the address without loading a new page, and shows the new part with a smooth transition. */
+export function go(path: string) {
+  if (path === location.pathname) return;
+  history.pushState(null, '', path);
+  onGo?.(path);
+}
+
+/** The part to show, from the address; follows `go` and the browser's back and forward buttons. */
+export function useRoute() {
+  const [path, setPath] = useState(location.pathname);
+  useEffect(() => {
+    // the header stays, the dark pill slides to the new link and the page crossfades (where the browser can)
+    const show = (p: string) => {
+      const update = () => { setPath(p); scrollTo(0, 0); };
+      if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) update();
+      else document.startViewTransition(() => flushSync(update));
+    };
+    onGo = show;
+    const back = () => show(location.pathname);
+    addEventListener('popstate', back);
+    return () => { onGo = null; removeEventListener('popstate', back); };
+  }, []);
+  return path;
+}
+
+/** A link to another part of the site that doesn't reload the page. */
+export function Link({ href, className, children, ...rest }: { href: string; className?: string; children: ReactNode; 'aria-current'?: 'page' }) {
+  const click = (e: MouseEvent) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return; // a new tab still works
+    e.preventDefault();
+    go(href);
+  };
+  return <a href={href} className={className} onClick={click} {...rest}>{children}</a>;
+}
+
+/** The header: the parts this person may open, how many questions are waiting, and signing out. */
+export function SectionHeader({ here, pages, waiting = 0, name, onSignOut }: { here: Section; pages: Section[]; waiting?: number; name: string; onSignOut: () => void }) {
   return (
     <header className="top">
       <div className="top-in">
         <span className="brand"><Logo /><span className="brand-text">{SECTIONS.find((s) => s.key === here)!.name}</span></span>
-        <nav className="nav" aria-label="The three parts">
-          {SECTIONS.map((s) => (
-            <a key={s.key} href={s.href} className={`nav-link${s.key === here ? ' on' : ''}`} aria-current={s.key === here ? 'page' : undefined}>
+        <nav className="nav" aria-label="Parts of the site">
+          {SECTIONS.filter((s) => pages.includes(s.key)).map((s) => (
+            <Link key={s.key} href={s.href} className={`nav-link${s.key === here ? ' on' : ''}`} aria-current={s.key === here ? 'page' : undefined}>
               {s.link}{s.key === 'hod' && waiting > 0 && <span className="badge pop" key={waiting}>{waiting}</span>}
-            </a>
+            </Link>
           ))}
-          {children}
+          <button type="button" className="top-link" title={`Signed in as ${name}`} onClick={onSignOut}>Sign out</button>
         </nav>
       </div>
     </header>
