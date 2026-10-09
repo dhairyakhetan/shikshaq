@@ -9,7 +9,8 @@
 --                (T00 when the question has no topic). Numbers are given in order and never reused.
 --   batch_id     B20261009-03 = the 3rd batch sent on 9 October 2026 (India time)
 --
--- The website never reads or writes `batches` or `questions` itself. It calls the functions at the end:
+-- The website never reads or writes `batches` or `questions` itself. It calls the functions at the end (the two that
+-- write, submit_batch and hod_set_status, only from the site's server with the secret key):
 --   submit_batch     the formatter sends a teacher's questions (they wait for the HoD)
 --   waiting_count    how many questions are waiting (the number in the header)
 --   hod_questions    the HoD desk loads every question
@@ -237,5 +238,7 @@ end $$;
 
 revoke execute on function public.submit_batch(text, jsonb), public.waiting_count(), public.hod_questions(),
   public.hod_set_status(text[], text, text) from public;
-grant execute on function public.submit_batch(text, jsonb), public.waiting_count(), public.hod_questions(),
-  public.hod_set_status(text[], text, text) to anon, authenticated;
+-- reading is public; writing only with the secret key, which only the site's server (api/write.ts) holds
+grant execute on function public.waiting_count(), public.hod_questions() to anon, authenticated;
+revoke execute on function public.submit_batch(text, jsonb), public.hod_set_status(text[], text, text) from anon, authenticated;
+grant execute on function public.submit_batch(text, jsonb), public.hod_set_status(text[], text, text) to service_role;

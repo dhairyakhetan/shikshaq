@@ -68,6 +68,7 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5. Deployed on Vercel from `main` 
 | File | What it does |
 | --- | --- |
 | `src/db.ts` | The only thing the three parts share. The row (`Row`, `COLUMNS`, `DIFFICULTIES`) and its exports (`toCSV` with no byte-order mark, `toJSON`, `toTSV`). The bank's shapes (`Batch`, `BankQuestion`: a row plus its question ID, batch ID, `status` pending/approved/rejected and the HoD's `note`), `setStatus` and `counts` for the page's own copy. Then the database calls, plain `fetch` to Supabase with the publishable key: `loadQuestionBank`, `waitingCount`, `sendBatch`, `loadForHod`, `saveStatus`, and `useLoad` (load when the page opens). |
+| `api/write.ts` | The site's one server route (a Vercel function). Every write goes through it: `submit_batch` (Send) and `hod_set_status` (approve, send back, undo), called with the Supabase secret key from Vercel's `SUPABASE_SECRET_KEY` environment variable. Not run by `npm run dev`; use `vercel dev` to try writes locally. |
 | `supabase/schema.sql` | The whole database: tables, IDs, the trigger that keeps `question_bank` in step, the security rules and the four functions the pages call. Already applied to the project. |
 
 ### Formatter logic
@@ -125,11 +126,11 @@ applied. Change the database only by editing that file and running the change in
   topic). The database numbers questions in order within each topic and never reuses a number.
 - Batch: `B20261009-03` = the 3rd batch sent on 9 October 2026 (India time).
 
-**Who can do what.** Row-level security is on. The pages use the publishable key, which can only read `question_bank` and
-call four functions:
-- `submit_batch(teacher, questions)` (formatter): adds a batch as waiting, skips duplicates, gives the IDs.
-- `waiting_count()`: the number in the header.
-- `hod_questions()` and `hod_set_status(ids, new_status, reason)` (HoD desk).
+**Who can do what.** Row-level security is on. Reading is public: the pages use the publishable key, which can read
+`question_bank` and call `waiting_count()` (the number in the header) and `hod_questions()` (the HoD desk's list).
+Writing is not: `submit_batch(teacher, questions)` (Send: adds a batch as waiting, skips duplicates, gives the IDs) and
+`hod_set_status(ids, new_status, reason)` (approve, send back) only work with the secret key, which only `api/write.ts`
+holds, on Vercel. The secret key is never in the repo or the page.
 
 `batches` and `questions` can't be read or written directly with that key. There is no login yet, so anyone with the
 link can use the HoD desk; logins will decide who counts as an HoD.

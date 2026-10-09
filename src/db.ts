@@ -93,17 +93,17 @@ export const counts = (bank: Bank): Record<Status, number> => ({
 // ---------------------------------------------------------------- talking to the database
 
 /**
- * Plain fetch to Supabase's API. The key is the project's publishable key, which is made to be public: the database's
- * own rules decide what it may do: read the approved question bank, send questions to wait for the HoD, count how many
- * are waiting, and (the HoD desk) load every question and change its status. There is no login yet.
+ * Reading goes straight to Supabase with the project's publishable key, which is made to be public: it can read the
+ * question bank, count what is waiting and load the HoD desk, and nothing else. Writing (sending questions, approving,
+ * sending back) goes through the site's own server, api/write.ts, which holds the secret key. The public key can't write.
  */
 const API = 'https://dfytzracuyiitlqeqszm.supabase.co/rest/v1';
 const KEY = 'sb_publishable__njgrg5F1tWacX_O6uSJNA_jSE1ucYg';
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API}/${path}`, { ...init, headers: { apikey: KEY, 'Content-Type': 'application/json', ...init.headers } });
+    res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...init.headers } });
   } catch {
     throw new Error("Couldn't reach the question bank. Check the internet connection and try again.");
   }
@@ -111,7 +111,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!res.ok) throw new Error(typeof body?.message === 'string' ? body.message : `The question bank didn't answer (${res.status}). Try again.`);
   return body as T;
 }
-const rpc = <T>(fn: string, args: object = {}) => request<T>(`rpc/${fn}`, { method: 'POST', body: JSON.stringify(args) });
+const rpc = <T>(fn: string, args: object = {}) => request<T>(`${API}/rpc/${fn}`, { method: 'POST', body: JSON.stringify(args), headers: { apikey: KEY } });
+const write = <T>(fn: 'submit_batch' | 'hod_set_status', args: object) => request<T>('/api/write', { method: 'POST', body: JSON.stringify({ fn, args }) });
 
 /** A row from the questions or question_bank table, with the batch's teacher and date where there is one. */
 interface DbQuestion extends Omit<Row, 'line'> {
@@ -126,7 +127,7 @@ const fromDb = (r: DbQuestion): BankQuestion => ({
 export async function loadQuestionBank(): Promise<BankQuestion[]> {
   const rows: DbQuestion[] = [];
   for (let from = 0; ; from += 1000) {
-    const page = await request<DbQuestion[]>(`question_bank?select=*&order=class,subject,chapter_no,topic_no,question_no&limit=1000&offset=${from}`);
+    const page = await request<DbQuestion[]>(`${API}/question_bank?select=*&order=class,subject,chapter_no,topic_no,question_no&limit=1000&offset=${from}`, { headers: { apikey: KEY } });
     rows.push(...page);
     if (page.length < 1000) return rows.map(fromDb);
   }
@@ -142,7 +143,7 @@ export const waitingCount = () => rpc<number>('waiting_count');
  */
 export async function sendBatch(teacher: string, rows: Row[]) {
   const ready = rows.filter((r) => r.chapter_id);
-  const r = await rpc<{ batch_id: string | null; sent: number; already: number }>('submit_batch', { teacher, questions: ready.map(toRecord) });
+  const r = await write<{ batch_id: string | null; sent: number; already: number }>('submit_batch', { teacher, questions: ready.map(toRecord) });
   return { batchId: r.batch_id, sent: r.sent, already: r.already, noId: rows.length - ready.length };
 }
 
@@ -156,7 +157,7 @@ export async function loadForHod(): Promise<Bank> {
 
 /** The HoD approves, sends back (with a reason) or moves back to waiting. */
 export const saveStatus = (ids: string[], status: Status, reason = '') =>
-  rpc<{ question_id: string }[]>('hod_set_status', { ids, new_status: status, reason });
+  write<{ question_id: string }[]>('hod_set_status', { ids, new_status: status, reason });
 
 /** Loads something when the page opens. `reload` fetches again and keeps showing the old data until the new arrives. */
 export function useLoad<T>(load: () => Promise<T>) {
