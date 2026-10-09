@@ -5,11 +5,12 @@
  *   the revision games read only the approved ones.
  * None of the three uses another's code; they only agree on the shapes below.
  *
- * Demo: kept in this browser (localStorage key "question-bank:v1"), so it works with no server. The shapes match the
- * tables planned for Shikshaq's database (batches, and questions with a status), so moving to the real database means
- * changing `useBank` only.
+ * Demo: there is no database yet and nothing is saved anywhere (no localStorage either). Every page starts from the
+ * sample bank at the end of this file, and a reload starts again. The shapes match the tables planned for Shikshaq's
+ * database (batches, and questions with a status): moving to it means replacing `useBank` and deleting the sample.
+ * CLAUDE.md, "The database", says how.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 // ---------------------------------------------------------------- a question row
 
@@ -76,7 +77,6 @@ export interface BankQuestion extends Row { id: string; batch: string; status: S
 export interface Bank { batches: Batch[]; questions: BankQuestion[] }
 
 export const EMPTY_BANK: Bank = { batches: [], questions: [] };
-const KEY = 'question-bank:v1';
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 
 /**
@@ -108,68 +108,217 @@ export const counts = (bank: Bank): Record<Status, number> => ({
   rejected: bank.questions.filter((q) => q.status === 'rejected').length,
 });
 
-function loadBank(): Bank {
-  try {
-    const v = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    return Array.isArray(v?.batches) && Array.isArray(v?.questions) ? v : EMPTY_BANK;
-  } catch { return EMPTY_BANK; }
-}
-
-/** The bank, saved in this browser and kept in step across open tabs. */
-export function useBank() {
-  const [bank, setBank] = useState<Bank>(loadBank);
-  useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(bank)); } catch { /* storage full or blocked */ }
-  }, [bank]);
-  useEffect(() => {
-    const on = (e: StorageEvent) => { if (e.key === KEY) setBank(loadBank()); };
-    addEventListener('storage', on);
-    return () => removeEventListener('storage', on);
-  }, []);
-  return [bank, setBank] as const;
-}
+/**
+ * The bank. Demo: it starts from the sample below and keeps changes only while the page is open. In Shikshaq this
+ * reads from and writes to the database instead (see CLAUDE.md).
+ */
+export const useBank = () => useState<Bank>(SAMPLE_BANK);
 
 export const newId = () => (typeof crypto?.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`);
 
-// ---------------------------------------------------------------- sample questions (so each part can be tried on its own)
+// ---------------------------------------------------------------- demo data
 
-const SAMPLE_TOPICS: [string, [string, string, Difficulty][]][] = [
-  ['Chemical Equations', [
-    ['Equation with the same number of atoms of each element on both sides', 'Balanced equation', 'easy'],
-    ['Law that requires a chemical equation to be balanced', 'Law of conservation of mass', 'medium'],
-    ['Substances that take part in a chemical reaction', 'Reactants', 'easy'],
-    ['Substances formed in a chemical reaction', 'Products', 'easy'],
-    ['Symbol written after a formula to show that a substance is a gas', '(g)', 'medium'],
-  ]],
-  ['Types of Chemical Reactions', [
-    ['Reaction in which two or more reactants form a single product', 'Combination', 'easy'],
-    ['Reaction in which a single reactant breaks down into simpler products', 'Decomposition', 'easy'],
-    ['Reaction in which a more reactive element takes the place of a less reactive one in its compound', 'Displacement', 'medium'],
-    ['Gain of oxygen by a substance during a reaction', 'Oxidation', 'easy'],
-    ['Loss of oxygen by a substance during a reaction', 'Reduction', 'easy'],
-    ['Reaction in which heat is given out', 'Exothermic', 'easy'],
-    ['Insoluble solid formed when two solutions react', 'Precipitate', 'medium'],
-  ]],
-  ['Effects of Oxidation in Everyday Life', [
-    ['Process in which metals are slowly eaten away by air and moisture', 'Corrosion', 'easy'],
-    ['Common name for the corrosion of iron', 'Rusting', 'easy'],
-    ['Fats and oils go ___ when they are oxidised and their smell and taste change', 'Rancid', 'medium'],
-    ['Gas filled in chip packets to keep the chips from going rancid', 'Nitrogen', 'easy'],
-    ['Coating iron with zinc to stop it rusting', 'Galvanisation', 'medium'],
-    ['Colour of the coating that forms on copper left in moist air', 'Green', 'easy'],
-  ]],
+/**
+ * What the database might hold, so each page can be tried on its own: CBSE chapters from Classes 9, 10 and 11, each one
+ * teacher's batch. Approved batches are the question bank the games use; waiting ones are on the HoD desk. A 4th item on
+ * a question means the HoD sent it back, with that reason. Delete all of this when the real database is connected.
+ */
+type DemoQuestion = [question: string, answer: string, difficulty: Difficulty, sentBack?: string];
+interface DemoChapter { cls: number; subject: string; code: string; no: number; name: string; by: string; hoursAgo: number; status: 'approved' | 'pending'; topics: [string, DemoQuestion[]][] }
+
+const DEMO: DemoChapter[] = [
+  { cls: 10, subject: 'Science', code: 'SCI', no: 1, name: 'Chemical Reactions and Equations', by: 'Ms Sharma', hoursAgo: 150, status: 'approved', topics: [
+    ['Chemical Equations', [
+      ['Equation with the same number of atoms of each element on both sides', 'Balanced equation', 'easy'],
+      ['Law that requires a chemical equation to be balanced', 'Law of conservation of mass', 'medium'],
+      ['Substances that take part in a chemical reaction', 'Reactants', 'easy'],
+      ['Substances formed in a chemical reaction', 'Products', 'easy'],
+      ['Symbol written after a formula to show that a substance is a gas', '(g)', 'medium'],
+    ]],
+    ['Types of Chemical Reactions', [
+      ['Reaction in which two or more reactants form a single product', 'Combination', 'easy'],
+      ['Reaction in which a single reactant breaks down into simpler products', 'Decomposition', 'easy'],
+      ['Reaction in which a more reactive element takes the place of a less reactive one in its compound', 'Displacement', 'medium'],
+      ['Gain of oxygen by a substance during a reaction', 'Oxidation', 'easy'],
+      ['Loss of oxygen by a substance during a reaction', 'Reduction', 'easy'],
+      ['Reaction in which heat is given out', 'Exothermic', 'easy'],
+      ['Insoluble solid formed when two solutions react', 'Precipitate', 'medium'],
+    ]],
+    ['Effects of Oxidation in Everyday Life', [
+      ['Process in which metals are slowly eaten away by air and moisture', 'Corrosion', 'easy'],
+      ['Common name for the corrosion of iron', 'Rusting', 'easy'],
+      ['Fats and oils go ___ when they are oxidised and their smell and taste change', 'Rancid', 'medium'],
+      ['Gas filled in chip packets to keep the chips from going rancid', 'Nitrogen', 'easy'],
+      ['Coating iron with zinc to stop it rusting', 'Galvanisation', 'medium'],
+      ['Colour of the coating that forms on copper left in moist air', 'Green', 'easy'],
+    ]],
+  ] },
+  { cls: 10, subject: 'Science', code: 'SCI', no: 2, name: 'Acids, Bases and Salts', by: 'Ms Sharma', hoursAgo: 100, status: 'approved', topics: [
+    ['Acids and Bases', [
+      ['Natural indicator that is extracted from lichen', 'Litmus', 'easy'],
+      ['Colour that blue litmus turns in an acid', 'Red', 'easy'],
+      ['Colour that phenolphthalein turns in a base', 'Colourless', 'easy', 'Wrong answer: phenolphthalein turns pink in a base. It is colourless in an acid.'],
+      ['Gas given out when an acid reacts with a metal such as zinc', 'Hydrogen', 'easy'],
+      ['Gas given out when an acid reacts with a metal carbonate', 'Carbon dioxide', 'easy'],
+      ['Bases that dissolve in water', 'Alkalis', 'medium'],
+      ['Reaction of an acid with a base to give a salt and water', 'Neutralisation', 'medium'],
+    ]],
+    ['How Strong Are Acids and Bases', [
+      ['Scale used to measure how acidic or basic a solution is', 'pH scale', 'easy'],
+      ['pH of a neutral solution', '7', 'easy'],
+      ['Acid made in our stomach that helps digest food', 'Hydrochloric acid', 'medium'],
+      ['Mild base, such as milk of magnesia, taken for indigestion', 'Antacid', 'easy'],
+      ['Tooth decay starts when the pH in the mouth falls below this', '5.5', 'hard'],
+    ]],
+    ['Salts', [
+      ['Common name of sodium chloride', 'Common salt', 'easy'],
+      ['Chemical name of baking soda', 'Sodium hydrogencarbonate', 'medium'],
+      ['Common name of sodium carbonate decahydrate', 'Washing soda', 'medium'],
+      ['Calcium sulphate hemihydrate, used to support fractured bones', 'Plaster of Paris', 'medium'],
+      ['Compound made by the action of chlorine on dry slaked lime', 'Bleaching powder', 'hard'],
+      ['Fixed number of water molecules in one formula unit of a salt', 'Water of crystallisation', 'medium'],
+    ]],
+  ] },
+  { cls: 9, subject: 'Science', code: 'SCI', no: 5, name: 'The Fundamental Unit of Life', by: 'Mr Iyer', hoursAgo: 130, status: 'approved', topics: [
+    ['Discovery and Types of Cells', [
+      ['Scientist who first saw cells, in a thin slice of cork', 'Robert Hooke', 'easy'],
+      ['Scientist who first saw free-living cells in pond water', 'Leeuwenhoek', 'medium'],
+      ['Organisms made of a single cell', 'Unicellular', 'easy'],
+      ['Cells, such as bacteria, whose nuclear region has no nuclear membrane', 'Prokaryotic', 'medium'],
+    ]],
+    ['Plasma Membrane and Cell Wall', [
+      ['Movement of water through a selectively permeable membrane', 'Osmosis', 'easy'],
+      ['Solution in which a cell swells up because water moves into it', 'Hypotonic', 'medium'],
+      ['Shrinking of the contents of a plant cell away from its wall when it loses water', 'Plasmolysis', 'medium'],
+      ['Substance that the plant cell wall is mainly made of', 'Cellulose', 'easy'],
+      ['Process by which an amoeba takes in food using its flexible membrane', 'Endocytosis', 'hard'],
+    ]],
+    ['Cell Organelles', [
+      ['Organelle known as the powerhouse of the cell', 'Mitochondria', 'easy'],
+      ['Organelles known as the suicide bags of the cell', 'Lysosomes', 'easy'],
+      ['Organelle that stores, changes and packages materials made in the cell', 'Golgi apparatus', 'medium'],
+      ['Plastids that contain chlorophyll', 'Chloroplasts', 'easy'],
+      ['Tiny particles where proteins are made', 'Ribosomes', 'medium'],
+      ['Storage sacs that are filled with cell sap in plant cells', 'Vacuoles', 'medium'],
+    ]],
+  ] },
+  { cls: 11, subject: 'Biology', code: 'BIO', no: 1, name: 'The Living World', by: 'Ms Fernandes', hoursAgo: 80, status: 'approved', topics: [
+    ['Diversity in the Living World', [
+      ['The number and types of organisms present on Earth', 'Biodiversity', 'easy'],
+      ['Process of giving a standard scientific name to an organism', 'Nomenclature', 'easy'],
+      ['Naming system in which every name has a genus name and a species name', 'Binomial nomenclature', 'easy'],
+      ['Scientist who gave the binomial system of naming', 'Carolus Linnaeus', 'easy'],
+      ['Language in which scientific names are written', 'Latin', 'medium'],
+    ]],
+    ['Taxonomic Categories', [
+      ['Basic unit of classification: a group of similar organisms', 'Species', 'easy'],
+      ['Group of related genera', 'Family', 'easy'],
+      ['Group of related families', 'Order', 'easy'],
+      ['Group of related classes, in animals', 'Phylum', 'medium'],
+      ['Highest taxonomic category', 'Kingdom', 'easy'],
+    ]],
+    ['Taxonomical Aids', [
+      ['Store of dried, pressed and preserved plant specimens on sheets', 'Herbarium', 'easy'],
+      ['Place where living plants are grown for study and reference', 'Botanical garden', 'easy'],
+      ['Place where wild animals are kept in surroundings like their natural home', 'Zoological park', 'easy'],
+      ['Collection of preserved plant and animal specimens for study', 'Museum', 'easy'],
+      ['Aid for identifying organisms, based on pairs of contrasting characters', 'Key', 'medium'],
+    ]],
+  ] },
+  { cls: 10, subject: 'Geography', code: 'GEO', no: 1, name: 'Resources and Development', by: 'Mr Iyer', hoursAgo: 60, status: 'approved', topics: [
+    ['Types of Resources', [
+      ['Resources that come from living things, such as forests and livestock', 'Biotic', 'easy'],
+      ['Resources made of non-living things, such as rocks and metals', 'Abiotic', 'easy'],
+      ['Resources that can be renewed, such as solar and wind energy', 'Renewable', 'easy'],
+      ['Resources found everywhere, like the air we breathe', 'Ubiquitous', 'medium'],
+      ['Resources found only in certain places, such as copper and iron ore', 'Ubiquitous', 'medium', 'Wrong answer: resources found only in certain places are localised. Ubiquitous means found everywhere, like air.'],
+    ]],
+    ['Resource Planning', [
+      ['Summit held in Rio de Janeiro in 1992 on the environment and development', 'Earth Summit', 'easy'],
+      ['Plan for sustainable development signed at the Rio summit', 'Agenda 21', 'medium'],
+      ['Development that meets present needs without harming future generations', 'Sustainable development', 'easy'],
+    ]],
+    ['Soil as a Resource', [
+      ['Most widely spread soil in India, found in the northern plains', 'Alluvial soil', 'easy'],
+      ['Other name for black soil', 'Regur', 'medium'],
+      ['Soil formed under high temperature and heavy rainfall, with intense leaching', 'Laterite', 'medium'],
+      ['Wearing away of the topsoil by wind and water', 'Soil erosion', 'easy'],
+      ['Ploughing along the contour lines to slow water running down a slope', 'Contour ploughing', 'medium'],
+      ['Rows of trees planted to break the force of the wind', 'Shelter belts', 'medium'],
+    ]],
+  ] },
+  { cls: 10, subject: 'Science', code: 'SCI', no: 3, name: 'Metals and Non-Metals', by: 'Mr Iyer', hoursAgo: 3, status: 'pending', topics: [
+    ['Physical Properties', [
+      ['Property of metals that lets them be beaten into thin sheets', 'Malleability', 'easy'],
+      ['Property of metals that lets them be drawn into thin wires', 'Ductility', 'easy'],
+      ['Metals that make a ringing sound when struck are said to be this', 'Sonorous', 'medium'],
+      ['Only metal that is a liquid at room temperature', 'Mercury', 'easy'],
+      ['Non-metal that is a liquid at room temperature', 'Bromine', 'easy'],
+    ]],
+    ['Chemical Properties', [
+      ['Metal, other than potassium, that is kept in kerosene so it does not catch fire', 'Sodium', 'medium'],
+      ['Metal oxides that react with both acids and bases', 'Amphoteric', 'medium'],
+      ['List of metals in order of how reactive they are', 'Reactivity series', 'easy'],
+      ['Compounds formed when a metal gives electrons to a non-metal', 'Ionic compounds', 'medium'],
+    ]],
+    ['Occurrence of Metals', [
+      ['Minerals from which a metal can be extracted at a profit', 'Ores', 'easy'],
+      ['Impurities such as soil and sand found with an ore', 'Gangue', 'medium'],
+      ['Strongly heating a sulphide ore in plenty of air', 'Roasting', 'medium'],
+      ['Strongly heating a carbonate ore in limited air', 'Calcination', 'medium'],
+      ['Mixture of two or more metals, or of a metal and a non-metal', 'Alloy', 'easy'],
+    ]],
+  ] },
+  { cls: 9, subject: 'Science', code: 'SCI', no: 6, name: 'Tissues', by: 'Ms Fernandes', hoursAgo: 20, status: 'pending', topics: [
+    ['Plant Tissues', [
+      ['Plant tissue whose cells keep dividing so the plant can grow', 'Meristematic tissue', 'easy'],
+      ['Meristem found at the tips of roots and stems', 'Apical meristem', 'medium'],
+      ['Plant tissue that carries water and minerals', 'Xylem', 'easy'],
+      ['Plant tissue that carries food', 'Phloem', 'easy'],
+      ['Small pores on the surface of a leaf', 'Stomata', 'easy'],
+    ]],
+    ['Animal Tissues', [
+      ['Tissue that covers the body and lines its organs', 'Epithelial tissue', 'easy'],
+      ['Fluid connective tissue that carries oxygen and food', 'Blood', 'easy'],
+      ['Tissue that joins a muscle to a bone', 'Tendon', 'easy'],
+      ['Tissue that joins two bones', 'Ligament', 'easy'],
+      ['Muscle found only in the heart', 'Cardiac muscle', 'easy'],
+      ['Cell of the nervous tissue', 'Neuron', 'easy'],
+    ]],
+  ] },
+  { cls: 10, subject: 'Geography', code: 'GEO', no: 3, name: 'Water Resources', by: 'Ms Kapoor', hoursAgo: 6, status: 'pending', topics: [
+    ['Multi-Purpose River Projects', [
+      ['Jawaharlal Nehru called these the "temples of modern India"', 'Dams', 'easy'],
+      ['Projects built on rivers for irrigation, electricity and flood control together', 'Multi-purpose projects', 'easy'],
+      ['River on which the Bhakra Nangal dam is built', 'Sutlej', 'medium'],
+      ['Movement against the Sardar Sarovar dam on the Narmada', 'Narmada Bachao Andolan', 'medium'],
+    ]],
+    ['Rainwater Harvesting', [
+      ['Underground tanks used to store rainwater in Rajasthan', 'Tankas', 'medium'],
+      ['First state to make rooftop rainwater harvesting compulsory for all houses', 'Tamil Nadu', 'easy'],
+      ['State where bamboo pipes have been used for about 200 years to carry stream water to plants', 'Meghalaya', 'medium'],
+      ['Diversion channels, also called guls, used for farming in the western Himalayas', 'Kuls', 'hard'],
+    ]],
+  ] },
 ];
 
-/** CBSE Class 10 Science, Chapter 1: 18 questions in 3 topics. */
-export const SAMPLE: Row[] = SAMPLE_TOPICS.flatMap(([topic, qs], t) => qs.map(([question, answer, difficulty], q) => ({
-  chapter_id: 'CBSE10SCI01', topic_id: `CBSE10SCI01T0${t + 1}`, board: 'CBSE', class: 10, subject: 'Science',
-  chapter_no: 1, chapter: 'Chemical Reactions and Equations', topic_no: t + 1, topic,
-  question_no: q + 1, question, answer, difficulty, line: 0,
-})));
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const HOUR = 3_600_000;
 
-/** The sample as a batch from "Sample teacher": waiting (for the HoD desk) or already approved (for the revision games). */
-export function addSample(bank: Bank, status: Status): Bank {
-  const r = addBatch(bank, SAMPLE, 'Sample teacher', new Date().toISOString(), newId);
-  const added = r.bank.questions.slice(bank.questions.length).map((q) => q.id);
-  return status === 'pending' ? r.bank : setStatus(r.bank, added, status, '', new Date().toISOString());
-}
+export const SAMPLE_BANK: Bank = (() => {
+  const now = Date.now();
+  const bank: Bank = { batches: [], questions: [] };
+  for (const c of [...DEMO].sort((a, b) => b.hoursAgo - a.hoursAgo)) {
+    const chapter_id = `CBSE${pad2(c.cls)}${c.code}${pad2(c.no)}`;
+    const batch = `demo-${chapter_id}`;
+    const reviewedAt = c.status === 'approved' ? new Date(now - (c.hoursAgo - 2) * HOUR).toISOString() : null;
+    bank.batches.push({ id: batch, by: c.by, at: new Date(now - c.hoursAgo * HOUR).toISOString() });
+    c.topics.forEach(([topic, qs], t) => qs.forEach(([question, answer, difficulty, sentBack], q) => bank.questions.push({
+      id: `${chapter_id}-${t + 1}-${q + 1}`, batch, chapter_id, topic_id: `${chapter_id}T${pad2(t + 1)}`,
+      board: 'CBSE', class: c.cls, subject: c.subject, chapter_no: c.no, chapter: c.name, topic_no: t + 1, topic,
+      question_no: q + 1, question, answer, difficulty, line: 0,
+      status: sentBack ? 'rejected' : c.status, note: sentBack ?? '', reviewedAt,
+    })));
+  }
+  return bank;
+})();

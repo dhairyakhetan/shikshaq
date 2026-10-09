@@ -6,7 +6,7 @@ import {
 import {
   baseName, EXAMPLE, format, lineLevels, MAX_ANSWER, MAX_QUESTION, missing, NO_ANSWER, visibleIssues,
 } from '../src/format';
-import { addBatch, addSample, counts, EMPTY_BANK, SAMPLE, setStatus, toCSV, toJSON, toRecord, toTSV } from '../src/db';
+import { addBatch, counts, EMPTY_BANK, SAMPLE_BANK, setStatus, toCSV, toJSON, toRecord, toTSV } from '../src/db';
 
 const qa = (raw: string) => format(raw).rows.map((r) => [r.question, r.answer]);
 const HEAD = 'Board: CBSE\nClass: 10\nSubject: Science\nChapter 1: Matter\n';
@@ -429,12 +429,30 @@ describe('approval (the question bank behind the Approve page)', () => {
     expect(bank.questions.every((q) => q.status === 'pending')).toBe(true); // the original is untouched (so undo works)
   });
 
-  it('has a sample set that each part can load on its own', () => {
-    expect(SAMPLE).toHaveLength(18);
-    expect(new Set(SAMPLE.map((r) => r.topic_id))).toEqual(new Set(['CBSE10SCI01T01', 'CBSE10SCI01T02', 'CBSE10SCI01T03']));
-    expect(counts(addSample(EMPTY_BANK, 'pending'))).toEqual({ pending: 18, approved: 0, rejected: 0 });
-    expect(counts(addSample(EMPTY_BANK, 'approved'))).toEqual({ pending: 0, approved: 18, rejected: 0 });
-    expect(counts(addSample(addSample(EMPTY_BANK, 'approved'), 'pending'))).toEqual({ pending: 0, approved: 18, rejected: 0 }); // not twice
+  it('has a demo bank that is exactly what the formatter would make from the same questions', () => {
+    const { batches, questions } = SAMPLE_BANK;
+    expect(counts(SAMPLE_BANK)).toEqual({ pending: 33, approved: 78, rejected: 2 });
+    expect(new Set(questions.map((q) => q.chapter_id)).size).toBe(batches.length);
+    expect(new Set(questions.map((q) => q.class))).toEqual(new Set([9, 10, 11]));
+    expect(new Set(questions.map((q) => q.id)).size).toBe(questions.length);
+    expect(batches.map((b) => b.at)).toEqual(batches.map((b) => b.at).sort()); // oldest first
+    for (const b of batches) {
+      const qs = questions.filter((q) => q.batch === b.id);
+      const q0 = qs[0];
+      let text = `Board: ${q0.board}\nClass: ${q0.class}\nSubject: ${q0.subject}\nChapter ${q0.chapter_no}: ${q0.chapter}\n`;
+      for (const q of qs) {
+        if (q.question_no === 1) text += `Topic ${q.topic_no}: ${q.topic}\n`;
+        text += `${q.question} | ${q.answer} | ${q.difficulty}\n`;
+      }
+      const { rows, issues } = format(text);
+      expect(issues, b.id).toEqual([]);
+      expect(rows.map(toRecord), b.id).toEqual(qs.map(toRecord));
+      // waiting batches have not been looked at; reviewed ones have, and every question sent back says why
+      for (const q of qs) {
+        expect(q.status === 'pending', q.id).toBe(q.reviewedAt === null);
+        expect(q.status === 'rejected', q.id).toBe(q.note !== '');
+      }
+    }
   });
 
   it('lets a question that was sent back be sent again', () => {

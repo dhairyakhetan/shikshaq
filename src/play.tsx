@@ -1,29 +1,28 @@
 /**
  * Revise: the students' part. It reads only approved questions from the database (src/db.ts); the student picks a
- * chapter and the topics they studied, and a puzzle is made from those questions on their device by src/games, which
+ * class, subject and chapter, and the topics they studied, and a puzzle is made from those questions on their device by src/games, which
  * checks every puzzle before it is shown. Works on its own: no formatter or HoD desk code.
  */
 import { StrictMode, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
-import { addSample, counts, useBank, type BankQuestion } from './db';
+import { counts, useBank, type BankQuestion } from './db';
 import { GAME_TYPES, makeGame, seedOf, type Game, type GameType, type Item } from './games';
 import { GameView } from './playgames';
 import { SectionHeader } from './ui';
 
-const KEY = 'revise:v1';
 const NAMES: Record<GameType, string> = { crossword: 'Crossword', wordsearch: 'Word search', matching: 'Matching', fill: 'Fill in the blank' };
 
 interface Topic { key: string; no: number | null; name: string; count: number }
-interface Chapter { id: string; title: string; meta: string; topics: Topic[]; questions: BankQuestion[] }
+interface Chapter { id: string; cls: number | null; subject: string; no: number | null; title: string; meta: string; topics: Topic[]; questions: BankQuestion[] }
 
 const topicKey = (q: BankQuestion) => q.topic_id ?? `${q.chapter_id}|${q.topic}`;
 
-/** Approved questions grouped into chapters and their topics, in order. */
+/** Approved questions grouped into chapters and their topics, by class, subject and chapter number. */
 function chaptersOf(questions: BankQuestion[]): Chapter[] {
   const byChapter = new Map<string, BankQuestion[]>();
   for (const q of questions) if (q.chapter_id) byChapter.set(q.chapter_id, [...(byChapter.get(q.chapter_id) ?? []), q]);
-  return [...byChapter].sort(([a], [b]) => a.localeCompare(b)).map(([id, qs]) => {
+  return [...byChapter].map(([id, qs]) => {
     const topics = new Map<string, Topic>();
     for (const q of qs) {
       const k = topicKey(q);
@@ -33,35 +32,30 @@ function chaptersOf(questions: BankQuestion[]): Chapter[] {
     }
     const q0 = qs[0];
     return {
-      id, questions: qs,
+      id, questions: qs, cls: q0.class, subject: q0.subject, no: q0.chapter_no,
       title: `Chapter ${q0.chapter_no}: ${q0.chapter}`,
       meta: [q0.board, q0.class && `Class ${q0.class}`, q0.subject].filter(Boolean).join(' · '),
       topics: [...topics.values()].sort((a, b) => (a.no ?? 99) - (b.no ?? 99)),
     };
-  });
-}
-
-function loadPick(): { chapter: string; topics: string[] } {
-  try {
-    const v = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (typeof v?.chapter === 'string' && Array.isArray(v?.topics)) return v;
-  } catch { /* start fresh */ }
-  return { chapter: '', topics: [] };
+  }).sort((a, b) => (a.cls ?? 0) - (b.cls ?? 0) || a.subject.localeCompare(b.subject) || (a.no ?? 0) - (b.no ?? 0));
 }
 
 function Revise() {
-  const [bank, setBank] = useBank();
+  const [bank] = useBank();
   const chapters = useMemo(() => chaptersOf(bank.questions.filter((q) => q.status === 'approved')), [bank]);
-  const [pick, setPickState] = useState(loadPick);
+  const [pick, setPickState] = useState({ chapter: '', topics: [] as string[] });
   const [round, setRound] = useState(0);
   const [want, setWant] = useState<GameType | null>(null);
   const setPick = (p: { chapter: string; topics: string[] }) => {
     setPickState(p);
     setRound(0);
-    try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* not saved: fine */ }
   };
 
   const chapter = chapters.find((c) => c.id === pick.chapter) ?? chapters[0];
+  const classes = [...new Set(chapters.map((c) => c.cls))];
+  const subjects = [...new Set(chapters.filter((c) => c.cls === chapter?.cls).map((c) => c.subject))];
+  const inSubject = chapters.filter((c) => c.cls === chapter?.cls && c.subject === chapter?.subject);
+  const open = (c: Chapter | undefined) => { if (c) setPick({ chapter: c.id, topics: [] }); };
   const known = new Set(chapter?.topics.map((t) => t.key));
   const chosen = pick.chapter === chapter?.id && pick.topics.some((t) => known.has(t)) ? pick.topics.filter((t) => known.has(t)) : [...known];
   const items: Item[] = useMemo(
@@ -95,24 +89,30 @@ function Revise() {
         {!chapter ? (
           <div className="empty-state enter">
             <p><b>No approved questions yet.</b> Questions appear here once the HoD approves them.</p>
-            <div className="row">
-              <button type="button" className="btn primary" onClick={() => setBank((b) => addSample(b, 'approved'))}>Load sample questions</button>
-              <a className="btn quiet" href="/hod/">Go to the HoD desk</a>
-            </div>
           </div>
         ) : (
           <>
             <section className="card stack picker enter" aria-labelledby="pick-h">
-              <div className="batch-head">
-                <div>
-                  <h2 id="pick-h">{chapter.title}</h2>
-                  <p className="small muted">{chapter.meta} · {chapter.questions.length} approved questions</p>
-                </div>
-                {chapters.length > 1 && (
-                  <select aria-label="Chapter" value={chapter.id} onChange={(e) => setPick({ chapter: e.target.value, topics: [] })}>
-                    {chapters.map((c) => <option key={c.id} value={c.id}>{c.title} ({c.meta})</option>)}
+              <div className="pickers">
+                <label className="field">Class
+                  <select value={chapter.cls ?? ''} onChange={(e) => open(chapters.find((c) => String(c.cls) === e.target.value))}>
+                    {classes.map((n) => <option key={n} value={n ?? ''}>Class {n}</option>)}
                   </select>
-                )}
+                </label>
+                <label className="field">Subject
+                  <select value={chapter.subject} onChange={(e) => open(chapters.find((c) => c.cls === chapter.cls && c.subject === e.target.value))}>
+                    {subjects.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label className="field">Chapter
+                  <select value={chapter.id} onChange={(e) => open(chapters.find((c) => c.id === e.target.value))}>
+                    {inSubject.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div>
+                <h2 id="pick-h">{chapter.title}</h2>
+                <p className="small muted">{chapter.meta} · {chapter.questions.length} approved questions</p>
               </div>
               <fieldset className="topics">
                 <legend>Which topics did you study?</legend>
@@ -141,7 +141,7 @@ function Revise() {
                 <p className="empty">These topics don't have enough questions for a puzzle yet. Pick more topics.</p>
               )}
             </section>
-            <p className="demo small">Demo: the questions come from the question bank saved in this browser. In Shikshaq they will come from the database, and only approved ones are shown.</p>
+            <p className="demo small">Demo: these are sample questions built into the page, and nothing is saved. In Shikshaq they will come from the database, and only questions the HoD approved are shown.</p>
           </>
         )}
       </main>

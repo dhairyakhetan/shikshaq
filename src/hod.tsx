@@ -6,7 +6,7 @@
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
-import { addSample, counts, EMPTY_BANK, setStatus, toCSV, toJSON, useBank, type BankQuestion, type Status } from './db';
+import { counts, SAMPLE_BANK, setStatus, toCSV, toJSON, useBank, type BankQuestion, type Status } from './db';
 import { CheckIcon, DownloadIcon, RowsTable, SectionHeader, useUndo } from './ui';
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
@@ -34,11 +34,6 @@ function HodDesk() {
     }, 220);
     const did = status === 'approved' ? 'approved' : status === 'rejected' ? 'sent back' : 'moved to waiting';
     offer(`${plural(ids.length, 'question')} ${did}`, () => setBank(before));
-  };
-  const clearAll = () => {
-    const before = bank;
-    setBank(EMPTY_BANK);
-    offer('Demo cleared', () => setBank(before));
   };
 
   const shown = bank.questions.filter((q) => q.status === tab);
@@ -87,8 +82,7 @@ function HodDesk() {
         <p>Questions teachers send from the formatter wait here. Only approved questions go into the question bank and the games.</p>
       </div>
       <p className="demo enter">
-        <b>Demo:</b> everything here is saved in this browser only. In Shikshaq, only HoDs will open the HoD desk, and approvals will be saved in the database.
-        {bank.questions.length > 0 && <> <button type="button" className="linkish" onClick={clearAll}>Clear the demo</button></>}
+        <b>Demo:</b> these are sample questions, and nothing is saved: reloading the page starts again. In Shikshaq, only HoDs will open the HoD desk, and every approval will be saved in the database.
       </p>
 
       <div className="tabs enter" role="tablist">
@@ -120,7 +114,7 @@ function HodDesk() {
         <div className="empty-state enter">
           <p><b>Nothing is waiting.</b> Questions sent from the formatter appear here.</p>
           <div className="row">
-            <button type="button" className="btn primary" onClick={() => setBank((b) => addSample(b, 'pending'))}>Add a sample batch</button>
+            <button type="button" className="btn primary" onClick={() => setBank(SAMPLE_BANK)}>Start the demo again</button>
             <a className="btn quiet" href="/">Go to the formatter</a>
           </div>
         </div>

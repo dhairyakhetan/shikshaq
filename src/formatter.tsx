@@ -8,21 +8,10 @@ import { baseName, EXAMPLE, format, lineLevels, missing, visibleIssues, type Iss
 import { Guide } from './Guide';
 import { ActionIcon, ArrowDownIcon, CopyIcon, DownloadIcon, RowsTable, SectionHeader, SendIcon, useUndo } from './ui';
 
-const KEY = 'question-formatter:v1';
-const NAME_KEY = 'question-formatter:name';
 const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: 'Science', chapter: '1: Chemical Reactions' };
-
-/** The draft is kept in this browser so a refresh never loses it. */
-function load(): string {
-  try {
-    const v = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    return typeof v?.raw === 'string' ? v.raw : '';
-  } catch { return ''; /* private window or unreadable draft */ }
-}
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const motion = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
-const stored = (key: string) => { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } };
 
 /** Scrolls smoothly to a part of the page and moves keyboard focus there, without adding "#..." to the address. */
 function scrollToEl(el: HTMLElement | null) {
@@ -33,13 +22,13 @@ function scrollToEl(el: HTMLElement | null) {
 
 function Formatter() {
   const [bank, setBank] = useBank();
-  const [raw, setRaw] = useState(load);
+  const [raw, setRaw] = useState('');
   const [done, setDone] = useState('');
   const [caret, setCaret] = useState(0);
   /** Bumped when the whole text is replaced (paste, example, clear), so the table plays its entrance again. */
   const [batch, setBatch] = useState(0);
   const { offer, toast } = useUndo();
-  const [teacher, setTeacher] = useState(() => stored(NAME_KEY));
+  const [teacher, setTeacher] = useState('');
   const [sent, setSent] = useState<{ sent: number; noId: number; already: number } | null>(null);
   const [resultsInView, setResultsInView] = useState(true);
   /** The line being typed on in the Questions box, and the detail box being typed in: problems there wait until they move on. */
@@ -48,10 +37,6 @@ function Formatter() {
   const boxTimer = useRef(0);
   const box = useRef<HTMLTextAreaElement>(null);
   const results = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify({ raw })); } catch { /* storage full or blocked */ }
-  }, [raw]);
 
   // on a phone the results are below the box: a small pill points to them while they are out of sight
   useEffect(() => {
@@ -122,7 +107,6 @@ function Formatter() {
   /** Sends the questions to the HoD as one batch. */
   const ready = rows.filter((r) => r.chapter_id).length;
   const send = () => {
-    try { localStorage.setItem(NAME_KEY, teacher.trim()); } catch { /* not saved: fine */ }
     const { bank: next, ...result } = addBatch(bank, rows, teacher, new Date().toISOString(), newId);
     setBank(next);
     setSent(result);
@@ -256,7 +240,7 @@ function Formatter() {
                 <p className={`sent-note ${sent.sent ? 'ok' : 'warn'}`} key={JSON.stringify(sent)}>
                   {sent.sent ? <>Sent {plural(sent.sent, 'question')}. </> : 'Nothing new to send. '}
                   {sent.already > 0 && <>{plural(sent.already, 'question was', 'questions were')} already sent, so {sent.already === 1 ? 'it was' : 'they were'} skipped. </>}
-                  {sent.sent > 0 && <a className="linkish" href="/hod/">See them on the HoD desk</a>}
+                  {sent.sent > 0 && <>This is a demo and nothing is saved, so they won't show up on the HoD desk. In Shikshaq they will.</>}
                 </p>
               )}
             </form>

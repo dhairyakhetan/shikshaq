@@ -8,8 +8,10 @@ Three separate parts, each its own page. They work without each other and share 
 | `/hod/` **HoD desk** | The HoD | Approve questions or send them back with a reason. Approved questions are the question bank. |
 | `/play/` **Revise** | Students | Pick the topics you studied and play a crossword, word search, matching or fill-in-the-blank puzzle made from them. |
 
-For now the question bank is a demo saved in the browser (`localStorage`); in Shikshaq it will be the database, and
-`useBank` in `src/db.ts` is the only thing that changes.
+The questions will come from Shikshaq's database. For now there is no database and nothing is saved, not even in the
+browser: each page starts from a sample question bank in `src/db.ts` (CBSE Classes 9, 10 and 11; Science, Biology and
+Geography; 8 chapters, 113 questions, some approved, some waiting, two sent back), and a reload starts again.
+[CLAUDE.md](CLAUDE.md) says how the database will plug in.
 
 The pages use Shikshaq's look (its colours, fonts, pill buttons, shadows and motion timings), so they can move into the
 main site without looking out of place.
@@ -24,7 +26,7 @@ chapter_id, topic_id, board, class, subject, chapter_no, chapter, topic_no, topi
 
 Download them as **CSV** (imports straight into a database table, no byte-order mark) or **JSON** (an array of the same records,
 `null` for anything missing, `class` as a number), or copy them for Google Sheets. The site reads its own CSV and Sheets copy back
-unchanged. Everything runs in the browser; nothing is uploaded. The draft is kept in the browser (`localStorage`, key `question-formatter:v1`).
+unchanged. Everything runs in the browser; nothing is uploaded or saved.
 
 ## Chapter and topic IDs
 
@@ -72,11 +74,12 @@ Teachers press **Send for approval** (with their name) on the formatter. On the 
 grouped by chapter and topic, and approves questions or sends them back with a reason the teacher sees, one by one or the
 whole batch; every action can be undone. **Approved** is the question bank the games use, and downloads as CSV or JSON.
 A question with no chapter ID can't be sent, and one already waiting or approved isn't sent twice. For now this is a demo
-saved in the browser (`localStorage`); in Shikshaq only HoDs will see it and it will be saved in the database.
+with sample batches from three teachers, and nothing is saved; in Shikshaq only HoDs will see it and every approval will
+be saved in the database.
 
 ## Revise (`/play/`)
 
-Students pick a chapter and tick the topics they studied. Every game those questions can make is offered (a game that
+Students pick their class, subject and chapter, and tick the topics they studied. Every game those questions can make is offered (a game that
 can't be made, say because the answers are too long for a grid, is greyed out); **New puzzle** makes another.
 
 - **Crossword**: tap a square and type; tap it again to switch between across and down. Check marks wrong letters;
@@ -86,7 +89,7 @@ can't be made, say because the answers are too long for a grid, is greyed out); 
 - **Fill in the blank**: type in the gap and press Enter. Capitals, accents and punctuation don't matter; after two wrong tries
   the answer can be shown.
 
-Only approved questions are used, and a question the HoD takes back disappears at once.
+Only approved questions are used.
 
 ## What it reads
 
