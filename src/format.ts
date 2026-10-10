@@ -352,6 +352,36 @@ export function lineLevels(issues: Issue[]): Map<number, Level> {
   return out;
 }
 
+type Written = Pick<Row, 'board' | 'class' | 'subject' | 'chapter_no' | 'chapter' | 'topic_no' | 'topic' | 'question' | 'answer' | 'difficulty'>;
+
+/**
+ * Rows written back in the one format: a detail line whenever a detail changes, a Topic line for each topic, then
+ * "Question | Answer" (and the difficulty). Reading the text again gives the same rows. "Fix in the formatter" uses it
+ * to put a question that was sent back into the Questions box.
+ */
+export function asText(rows: Written[]): string {
+  const out: string[] = [];
+  const last: Partial<Record<'board' | 'class' | 'subject' | 'chapter' | 'topic', string>> = {};
+  const put = (k: keyof typeof last, line: string, force = false) => {
+    if (!force && last[k] === line) return;
+    out.push(line);
+    last[k] = line;
+  };
+  for (const r of rows) {
+    if (r.board) put('board', `Board: ${r.board}`);
+    if (r.class !== null) put('class', `Class: ${r.class}`);
+    if (r.subject) put('subject', `Subject: ${r.subject}`);
+    const topic = r.topic ? (r.topic_no !== null ? `Topic ${r.topic_no}: ${r.topic}` : `Topic: ${r.topic}`) : '';
+    // a Chapter line also ends the topic above it, so it is written again for a question without a topic
+    const chapter = r.chapter_no !== null ? `Chapter ${r.chapter_no}: ${r.chapter}` : `Chapter: ${r.chapter}`;
+    if (last.chapter !== chapter || (!topic && last.topic)) { put('chapter', chapter, true); delete last.topic; }
+    if (topic) put('topic', topic);
+    const sep = /[|\t]/.test(r.question + r.answer) ? '\t' : ' | '; // a bar inside a part: tabs keep the parts apart
+    out.push([r.question, r.answer, ...(r.difficulty ? [r.difficulty] : [])].join(sep));
+  }
+  return out.join('\n') + '\n';
+}
+
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /** File name: the chapter ID and name when everything is one chapter ("CBSE10SCI01-chemical-reactions"), else the subject. */

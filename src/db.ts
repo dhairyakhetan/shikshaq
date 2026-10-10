@@ -139,15 +139,22 @@ const fromDb = (r: DbQuestion): BankQuestion => ({
   ...r, line: 0, id: r.question_id, batch: r.batch_id ?? '', status: r.status ?? 'approved', note: r.note ?? '', reviewedAt: r.reviewed_at ?? r.approved_at ?? null,
 });
 
-/** Revise: every approved question, from the question_bank table, in order. */
+/**
+ * Revise and the HoD's download: every approved question, from the question_bank table, in order. The database sends
+ * at most 1,000 rows at a time: the first page says how many there are, and the rest are asked for all at once. The
+ * question ID makes the order exact, so no page repeats or skips a row.
+ */
 export async function loadQuestionBank(): Promise<BankQuestion[]> {
-  const rows: DbQuestion[] = [];
-  for (let from = 0; ; from += 1000) {
-    const page = await ask<DbQuestion[]>(supabase.from('question_bank').select('*')
-      .order('class').order('subject').order('chapter_no').order('topic_no').order('question_no').range(from, from + 999));
-    rows.push(...page);
-    if (page.length < 1000) return rows.map(fromDb);
-  }
+  const PAGE = 1000;
+  const page = (from: number) => supabase.from('question_bank').select('*', { count: from ? undefined : 'exact' })
+    .order('class').order('subject').order('chapter_no').order('topic_no').order('question_no').order('question_id')
+    .range(from, from + PAGE - 1);
+  const [first, total] = await ask(page(0).then((r) => ({ data: [r.data ?? [], r.count ?? 0] as const, error: r.error })));
+  // the pages are as long as the first one came back (in case the project sends fewer than 1,000 at a time)
+  const step = first.length > 0 && first.length < Math.min(PAGE, total) ? first.length : PAGE;
+  const rest = await Promise.all(Array.from({ length: Math.max(0, Math.ceil(total / step) - 1) }, (_, i) => ask<DbQuestion[]>(page((i + 1) * step))));
+  // a question approved while the pages load can push one onto the next page too: keep it once
+  return [...new Map([first, ...rest].flat().map((r) => [r.question_id, r])).values()].map(fromDb);
 }
 
 /** The number in the header: questions waiting for the HoD. HoDs and the admin only. */
@@ -187,9 +194,10 @@ export const approvedCount = async () =>
 /**
  * The HoD approves, sends back (with a reason) or moves back to waiting. Only works for HoDs. `skipped`: sent-back
  * questions that stayed sent back, because the same question was sent again and is already waiting or approved.
+ * `waiting` and `approved`: how many there are now, for the counts on the page (so it needn't ask again).
  */
 export const saveStatus = (ids: string[], status: Status, reason = '') =>
-  ask<{ changed: string[]; skipped: string[] }>(supabase.rpc('hod_set_status', { ids, new_status: status, reason }));
+  ask<{ changed: string[]; skipped: string[]; waiting: number; approved: number }>(supabase.rpc('hod_set_status', { ids, new_status: status, reason }));
 
 /** A notification: one of the person's questions that was sent back, with why (`note`) and by whom. */
 export interface SentBack extends BankQuestion { reviewer: string; seen: boolean; now: 'pending' | 'approved' | null }

@@ -5,7 +5,7 @@ import {
   STATES, SUBJECTS, titleCase, writeDetail,
 } from '../src/details';
 import {
-  baseName, EXAMPLE, format, lineLevels, MAX_ANSWER, MAX_QUESTION, missing, NO_ANSWER, visibleIssues,
+  asText, baseName, EXAMPLE, format, lineLevels, MAX_ANSWER, MAX_QUESTION, missing, NO_ANSWER, visibleIssues,
 } from '../src/format';
 import { counts, setStatus, toCSV, toJSON, toRecord, toTSV, type Bank } from '../src/db';
 
@@ -237,6 +237,18 @@ describe('output for the database', () => {
     const strip = (rs: typeof rows) => rs.map(({ line: _line, ...r }) => r);
     expect(strip(format(toCSV(rows)).rows)).toEqual(strip(rows));
     expect(strip(format(toTSV(rows)).rows)).toEqual(strip(rows));
+  });
+
+  it('writes rows back in the one format, which reads back into the same rows ("Fix in the formatter")', () => {
+    const strip = (rs: typeof rows) => rs.map(({ line: _line, ...r }) => r);
+    const text = asText(rows);
+    expect(format(text).issues).toEqual([]);
+    expect(strip(format(text).rows)).toEqual(strip(rows));
+    expect(text.split('\n').slice(0, 6)).toEqual(['Board: CBSE', 'Class: 10', 'Subject: Science', 'Chapter 1: Chemical Reactions and Equations', 'Topic 1: Chemical Equations', 'Equation with the same number of atoms of each element on both sides? | Balanced equation']);
+    // one question on its own, a question with no topic after one with a topic, and a bar inside an answer
+    expect(strip(format(asText([rows[3]])).rows)).toEqual(strip([{ ...rows[3], question_no: 1 }]));
+    const mixed = format(`${HEAD}Topic 1: Atoms\nQ1 | A1\nChapter 2: Molecules\nQ2 | A2\nQ3\tA | B`).rows;
+    expect(strip(format(asText(mixed)).rows)).toEqual(strip(mixed));
   });
 
   it('writes a spreadsheet copy with the same columns', () => {

@@ -16,7 +16,8 @@ sign-in and the profile's avatar and bio, and there is no sample data: when the 
 The pages use Shikshaq's look (its colours, fonts, pill buttons, shadows and motion timings). This is a standalone site.
 
 Each person's profile card has a **bell** with their notifications: every question of theirs the HoD sent back, with the
-reason. The number of new ones shows on their avatar at the top of every page.
+reason, and **Fix in the formatter**, which puts the question back in the Questions box with its details. The number of
+new ones shows on their avatar at the top of every page.
 
 ## Question formatter (`/`)
 
@@ -30,7 +31,8 @@ chapter_id, topic_id, board, class, subject, chapter_no, chapter, topic_no, topi
 
 Download them as **CSV** (imports straight into a database table, no byte-order mark) or **JSON** (an array of the same records,
 `null` for anything missing, `class` as a number), or copy them for Google Sheets. The site reads its own CSV and Sheets copy back
-unchanged. Everything runs in the browser; nothing is uploaded or saved.
+unchanged. Formatting runs in the browser: nothing is uploaded until you press Send, and the text isn't saved, so
+leaving the page with questions not yet sent or downloaded asks first.
 
 ## Chapter and topic IDs
 

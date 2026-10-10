@@ -11,10 +11,11 @@ import { lazy, StrictMode, Suspense, useCallback, useEffect, useState, type Reac
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { markSentBackSeen, myRole, mySentBack, nameOf, signIn, signOut, useSession, waitingCount, type Role, type SentBack } from './db';
+import { asText } from './format';
 import { Formatter } from './formatter';
 import { HodDesk } from './hod';
 import { ProfilePage, useProfile } from './profile';
-import { go, GoogleIcon, Logo, SectionHeader, useRoute, type Section } from './ui';
+import { go, GoogleIcon, Logo, SECTIONS, SectionHeader, useRoute, type Section } from './ui';
 
 /** Scrolls down to the guide at the bottom of the formatter, without adding "#..." to the address. */
 function toGuide() {
@@ -44,13 +45,16 @@ function App() {
   const path = useRoute();
   const [profile, setProfile] = useProfile(session?.user.email ?? '');
   const [opened, setOpened] = useState<Set<Section>>(new Set());
-  // notifications: loaded once signed in, and again whenever the profile opens
+  // notifications: loaded once signed in (at the same time as the role, not after it), and again whenever the profile opens
   const [alerts, setAlerts] = useState<{ list?: SentBack[]; error?: string }>({});
   const [alertsTry, setAlertsTry] = useState(0); // "Try again"
   const [fresh, setFresh] = useState<Set<string>>(new Set()); // the ones that were new when the bell was opened
   const [focus, setFocus] = useState<{ ids: string[]; n: number } | null>(null); // opens the bell, at these questions
   /** Opens the notifications, at these questions (the formatter's "See why"). */
   const showSentBack = useCallback((ids: string[]) => { setFocus({ ids, n: Date.now() }); go('/profile/'); }, []);
+  /** "Fix in the formatter": puts a sent-back question, with its details, in the Questions box. */
+  const [draft, setDraft] = useState<{ text: string; n: number } | null>(null);
+  const fix = useCallback((a: SentBack) => { setDraft({ text: asText([a]), n: Date.now() }); go('/'); }, []);
 
   const pages: Section[] = role.role === 'admin' ? ['formatter', 'hod', 'play'] : reviewer ? ['formatter', 'hod'] : ['formatter'];
   const wanted = partOf(path);
@@ -61,9 +65,14 @@ function App() {
     setOpened((o) => (o.has(here) ? o : new Set(o).add(here)));
   }, [here, wanted, role.role]);
   const onProfile = here === 'profile';
+  // each part has its own tab title, so it can be told apart in the browser's tabs and history
+  useEffect(() => {
+    const part = SECTIONS.find((s) => s.key === here)!.name;
+    document.title = session && role.role ? `${part} · Shikshaq question bank` : 'Shikshaq question bank';
+  }, [here, session, role.role]);
   useEffect(() => {
     if (!onProfile) { setFresh((f) => (f.size ? new Set() : f)); setFocus(null); }
-    if (!role.role) { setAlerts({}); return; }
+    if (!who) { setAlerts({}); return; }
     let current = true; // a later load wins
     setAlerts((a) => ({ list: a.list }));
     mySentBack().then((list) => {
@@ -73,7 +82,7 @@ function App() {
       if (onProfile && list.some((a) => !a.seen)) setFocus((f) => f ?? { ids: [], n: Date.now() });
     }, (e: Error) => { if (current) setAlerts((a) => ({ list: a.list, error: e.message })); });
     return () => { current = false; };
-  }, [role.role, onProfile, alertsTry]);
+  }, [who, onProfile, alertsTry]);
   /** The bell was opened: what was new is now seen (and keeps its "New" label while the profile is open). */
   const seeAlerts = () => {
     const unseen = alerts.list?.filter((a) => !a.seen).map((a) => a.id) ?? [];
@@ -101,11 +110,11 @@ function App() {
   }
 
   const parts: Record<Section, () => ReactNode> = {
-    formatter: () => <Formatter teacher={nameOf(session)} reviewer={reviewer} onSent={recount} onSentBack={showSentBack} />,
-    hod: () => <HodDesk onChange={recount} />,
+    formatter: () => <Formatter teacher={nameOf(session)} reviewer={reviewer} onSent={recount} onSentBack={showSentBack} draft={draft} />,
+    hod: () => <HodDesk onWaiting={setWaiting} />,
     play: () => <Suspense fallback={<main className="page"><p className="empty">Loading the games…</p></main>}><Revise /></Suspense>,
     profile: () => <ProfilePage name={nameOf(session)} email={session.user.email ?? ''} role={role.role ?? 'member'} profile={profile} onChange={setProfile} onSignOut={() => signOut()}
-      alerts={alerts} fresh={fresh} focus={focus} active={onProfile} onSeen={seeAlerts} onRetry={() => setAlertsTry((n) => n + 1)} />,
+      alerts={alerts} fresh={fresh} focus={focus} active={onProfile} onSeen={seeAlerts} onRetry={() => setAlertsTry((n) => n + 1)} onFix={fix} />,
   };
   return (
     <>

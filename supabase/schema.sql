@@ -56,17 +56,20 @@ create function private.is_hod() returns boolean language sql stable security de
 as $$ select coalesce(private.role() in ('hod', 'admin'), false) $$;
 
 -- called every time the site opens: saves a new person as a member, notes their name and when they were last here,
--- and returns their role (so a change made by the admin shows on their next refresh)
+-- and returns their role (so a change made by the admin shows on their next refresh). A refresh within 10 minutes
+-- with the same name writes nothing.
 create function public.my_role() returns text language plpgsql security definer set search_path = ''
 as $$
 declare
   mail text := lower(auth.jwt() ->> 'email');
   who text := coalesce(nullif(btrim(auth.jwt() -> 'user_metadata' ->> 'full_name'), ''), nullif(btrim(auth.jwt() -> 'user_metadata' ->> 'name'), ''));
+  mine text := private.role();
 begin
-  if private.role() is null then return null; end if;
-  insert into public.roles (email, role, name, last_seen_at) values (mail, 'member', who, now())
-  on conflict (email) do update set name = coalesce(excluded.name, public.roles.name), last_seen_at = now();
-  return (select r.role from public.roles r where r.email = mail);
+  if mine is null then return null; end if;
+  insert into public.roles as r (email, role, name, last_seen_at) values (mail, 'member', who, now())
+  on conflict (email) do update set name = coalesce(excluded.name, r.name), last_seen_at = now()
+  where r.last_seen_at is null or r.last_seen_at < now() - interval '10 minutes' or r.name is distinct from coalesce(excluded.name, r.name);
+  return mine; -- the role before saving is the role after: a new person is a member either way
 end $$;
 
 -- the admin's list of people: the owner, then admins, HoDs and members
@@ -117,6 +120,7 @@ create table public.batches (
   teacher_email text,
   sent_at timestamptz not null default now()
 );
+create index batches_teacher on public.batches (teacher_email); -- a teacher's notifications
 
 create table public.questions (
   question_id text primary key,
@@ -149,8 +153,13 @@ create table public.questions (
 );
 -- a question can't wait or be approved twice in one chapter; one that was sent back can be sent again
 create unique index questions_once_per_chapter on public.questions (chapter_id, private.norm(question)) where status <> 'rejected';
-create index questions_batch on public.questions (batch_id);
+create index questions_batch on public.questions (batch_id, status); -- a batch's questions, and a teacher's sent-back ones
 create index questions_status on public.questions (status, class, subject, chapter_id);
+-- the next question number in a topic (T00, no topic, is 0), sent-back copies of a question, and the approved
+-- questions newest first, each found without reading the whole table
+create index questions_numbering on public.questions (chapter_id, (coalesce(topic_no, 0)), question_no);
+create index questions_sent_back on public.questions (chapter_id, private.norm(question)) where status = 'rejected';
+create index questions_approved on public.questions (reviewed_at, question_id) where status = 'approved';
 
 create table public.question_bank (
   question_id text primary key references public.questions on delete cascade,
@@ -170,7 +179,8 @@ create table public.question_bank (
   teacher text not null,
   approved_at timestamptz not null
 );
-create index question_bank_order on public.question_bank (class, subject, chapter_no, topic_no, question_no);
+-- the order Revise and the download read it in; the question ID makes it exact, so no page repeats or skips a row
+create index question_bank_order on public.question_bank (class, subject, chapter_no, topic_no, question_no, question_id);
 
 comment on table public.batches is 'One row per "Send for approval" from the question formatter.';
 comment on table public.questions is 'Every question ever sent, waiting (pending), approved or sent back (rejected). Written only through the functions.';
@@ -272,7 +282,7 @@ $$;
 -- the ones without). Questions already waiting or approved in the same chapter are skipped. So is a question that was
 -- sent back to this same person and hasn't changed (same question and answer): it would only be sent back again, so the
 -- site points them to the reason instead. Sent back to someone else, it goes in as new. Returns the batch ID, how many
--- were sent and skipped, the IDs of the sent-back ones, and the new rows.
+-- were sent and skipped, the IDs of the sent-back ones, and the IDs of the new questions.
 create function public.submit_batch(questions jsonb) returns jsonb
 language plpgsql security definer set search_path = ''
 as $$
@@ -284,7 +294,7 @@ declare
   seq int;
   bid text;
   q jsonb;
-  r public.questions;
+  qid text;
   cid text;
   tno int;
   qtext text;
@@ -296,7 +306,7 @@ declare
   already int := 0;
   sent_back int := 0;
   back_ids text[] := '{}';
-  added jsonb := '[]';
+  added text[] := '{}';
 begin
   if private.role() is null or mail is null then raise exception 'Please sign in first.'; end if;
   who := left(who, 80);
@@ -332,15 +342,15 @@ begin
       back_ids := back_ids || back;
       continue;
     end if;
-    select coalesce(max(x.question_no), 0) + 1 into n from public.questions x where x.chapter_id = cid and x.topic_no is not distinct from tno;
+    select coalesce(max(x.question_no), 0) + 1 into n from public.questions x where x.chapter_id = cid and coalesce(x.topic_no, 0) = coalesce(tno, 0);
     insert into public.questions (question_id, batch_id, chapter_id, topic_id, board, class, subject, chapter_no, chapter,
                                   topic_no, topic, question_no, question, answer, difficulty)
     values (cid || 'T' || lpad(coalesce(tno, 0)::text, 2, '0') || 'Q' || lpad(n::text, 3, '0'), bid, cid,
             case when tno is null then null else cid || 'T' || lpad(tno::text, 2, '0') end,
             q->>'board', (q->>'class')::int, q->>'subject', (q->>'chapter_no')::int, q->>'chapter', tno, coalesce(q->>'topic', ''),
             n, qtext, btrim(q->>'answer'), q->>'difficulty')
-    returning * into r;
-    added := added || jsonb_build_array(to_jsonb(r) || jsonb_build_object('teacher', who, 'sent_at', now()));
+    returning question_id into qid;
+    added := added || qid;
     sent := sent + 1;
   end loop;
 
@@ -348,7 +358,7 @@ begin
     delete from public.batches b where b.batch_id = bid;
     bid := null;
   end if;
-  return jsonb_build_object('batch_id', bid, 'sent', sent, 'already', already, 'sent_back', sent_back, 'sent_back_ids', to_jsonb(back_ids), 'questions', added);
+  return jsonb_build_object('batch_id', bid, 'sent', sent, 'already', already, 'sent_back', sent_back, 'sent_back_ids', to_jsonb(back_ids), 'question_ids', to_jsonb(added));
 end $$;
 
 -- The number waiting, next to the HoD desk link. HoDs and the admin only.
@@ -368,12 +378,13 @@ begin
     select coalesce(jsonb_agg(to_jsonb(q) || jsonb_build_object('teacher', b.teacher, 'teacher_email', b.teacher_email, 'sent_at', b.sent_at)
                               order by b.sent_at, q.question_id), '[]')
     from public.questions q join public.batches b on b.batch_id = q.batch_id
-    where q.status <> 'approved'
+    where q.status in ('pending', 'rejected')
   );
 end $$;
 
 -- The HoD desk's approved questions, newest first, a page at a time: the page after (before_at, before_id), the
--- approval time and ID of the last one already shown. HoDs and the admin only.
+-- approval time and ID of the last one already shown (none for the first page). Each page reads only its own rows from
+-- questions_approved. HoDs and the admin only.
 create function public.hod_approved(before_at timestamptz default null, before_id text default null, take int default 200) returns jsonb
 language plpgsql stable security definer set search_path = ''
 as $$
@@ -384,14 +395,15 @@ begin
                               order by q.reviewed_at desc, q.question_id desc), '[]')
     from (
       select * from public.questions x
-      where x.status = 'approved' and (before_at is null or (x.reviewed_at, x.question_id) < (before_at, before_id))
+      where x.status = 'approved' and (x.reviewed_at, x.question_id) < (coalesce(before_at, 'infinity'), coalesce(before_id, ''))
       order by x.reviewed_at desc, x.question_id desc
       limit least(greatest(take, 1), 1000)
     ) q join public.batches b on b.batch_id = q.batch_id
   );
 end $$;
 
--- The HoD approves (approved), sends back with a reason (rejected) or moves back to waiting (pending).
+-- The HoD approves (approved), sends back with a reason (rejected) or moves back to waiting (pending). Returns what
+-- changed, what was skipped, and how many questions are now waiting and approved (for the page's counts).
 create function public.hod_set_status(ids text[], new_status text, reason text default '') returns jsonb
 language plpgsql security definer set search_path = ''
 as $$
@@ -427,7 +439,9 @@ begin
     returning q.question_id
   )
   select coalesce(jsonb_agg(changed.question_id), '[]') into done from changed;
-  return jsonb_build_object('changed', done, 'skipped', to_jsonb(skipped));
+  return jsonb_build_object('changed', done, 'skipped', to_jsonb(skipped),
+    'waiting', (select count(*) from public.questions where status = 'pending'),
+    'approved', (select count(*) from public.question_bank));
 end $$;
 
 -- Notifications: the signed-in person's questions that were sent back, newest first, with the reason, who sent them

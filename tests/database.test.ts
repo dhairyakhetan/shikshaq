@@ -92,6 +92,20 @@ describe('who can read and call what', () => {
     expect((await admin(`select name from public.roles where email = 'ann@x.in'`))[0].name).toBe('Ann T');
   });
 
+  it('my_role writes nothing on a refresh within 10 minutes, and notes the visit after that', async () => {
+    const seen = async () => (await admin(`select last_seen_at from public.roles where email = 'ann@x.in'`))[0].last_seen_at as Date;
+    await admin(`update public.roles set last_seen_at = now() - interval '5 minutes' where email = 'ann@x.in'`);
+    const before = await seen();
+    const xmin = async () => (await admin(`select xmin::text x from public.roles where email = 'ann@x.in'`))[0].x;
+    const row = await xmin();
+    expect(await value('ann@x.in', 'select public.my_role()', [], { name: 'Ann T' })).toBe('member');
+    expect([await seen(), await xmin()]).toEqual([before, row]); // the same row version: nothing was written
+    await admin(`update public.roles set last_seen_at = now() - interval '11 minutes' where email = 'ann@x.in'`);
+    const old = await seen();
+    await value('ann@x.in', 'select public.my_role()', [], { name: 'Ann T' });
+    expect((await seen()).getTime()).toBeGreaterThan(old.getTime());
+  });
+
   it('members can\'t read the tables, open the HoD desk or manage people', async () => {
     for (const t of ['questions', 'batches', 'roles']) refused(await as('ann@x.in', `select * from public.${t}`), /permission denied/);
     refused(await as('ann@x.in', `update public.question_bank set answer = 'x'`), /permission denied/);
@@ -157,7 +171,7 @@ describe('sending questions', () => {
 
   it('works out each topic ID itself, and keeps to the limits', async () => {
     const r = await sent('ann@x.in', [Q('Topic ID that disagrees?', 'A', { topic_id: 'CBSE10SCI01T09' })]);
-    expect(r.questions[0].topic_id).toBe('CBSE10SCI01T01');
+    expect((await admin('select topic_id from public.questions where question_id = $1', [r.question_ids[0]]))[0].topic_id).toBe('CBSE10SCI01T01');
     for (const x of [{ class: 13, chapter_id: 'CBSE13SCI01' }, { answer: 'a'.repeat(101) }, { question: 'q'.repeat(301) }, { answer: '  ' }, { difficulty: 'tough' }]) {
       expect((await send('ann@x.in', [Q('Limits?', 'Answer', x)])).error).toBeDefined();
     }
@@ -169,7 +183,8 @@ describe('sending questions', () => {
     const b = await sent('ann@x.in', [Q('What is rust?', 'Iron oxide'), Q('What is rust?', 'Iron oxide'), Q('No topic?', 'Fine', { topic_id: null, topic_no: null, topic: '' })]);
     expect(b.batch_id).toMatch(new RegExp(`^B${day}-\\d{2}$`));
     expect([b.sent, b.already]).toEqual([2, 1]);
-    expect(b.questions.map((q: Json) => q.question_id)).toContain('CBSE10SCI01T00Q001');
+    expect(b.question_ids).toContain('CBSE10SCI01T00Q001');
+    expect(b).not.toHaveProperty('questions'); // only the IDs come back, not every row
     const again = await sent('ann@x.in', [Q('WHAT IS  RUST', 'iron oxide'), Q('What is rust?!', 'Something else')]);
     expect(again).toMatchObject({ sent: 0, already: 2, batch_id: null }); // case, spaces and end punctuation don't count
     expect((await sent('ann@x.in', [Q('What is rust?', 'Iron oxide', { chapter_id: 'CBSE10SCI02', chapter_no: 2 })])).sent).toBe(1); // another chapter
@@ -223,18 +238,18 @@ describe('the HoD desk, notifications and the question bank', () => {
     expect(mine).toMatchObject({ sent: 0, sent_back: 1, sent_back_ids: [rust] });
     const theirs = await sent('ben@x.in', [Q('What is rust?', 'Iron oxide')]);
     expect(theirs.sent).toBe(1);
-    copy = theirs.questions[0].question_id;
+    copy = theirs.question_ids[0];
     expect(Number(copy.slice(-3))).toBeGreaterThan(Number(rust.slice(-3))); // numbers are never reused
     expect((await notes('ann@x.in'))[0].now).toBe('pending');
   });
 
   it('a sent-back question stays sent back while its copy waits or is approved', async () => {
-    for (const status of ['pending', 'approved']) expect((await decide('hod@x.in', [rust], status)).rows![0].r).toEqual({ changed: [], skipped: [rust] });
+    for (const status of ['pending', 'approved']) expect((await decide('hod@x.in', [rust], status)).rows![0].r).toMatchObject({ changed: [], skipped: [rust] });
     await decide('hod@x.in', [copy], 'approved');
     expect((await notes('ann@x.in'))[0].now).toBe('approved');
-    const d1 = (await sent('dan@x.in', [Q('What is an alloy?', 'Mixture of metals')])).questions[0].question_id;
+    const [d1] = (await sent('dan@x.in', [Q('What is an alloy?', 'Mixture of metals')])).question_ids;
     await decide('hod@x.in', [d1], 'rejected', 'Too easy.');
-    const d2 = (await sent('eve@x.in', [Q('What is an alloy?', 'Mixture of metals')])).questions[0].question_id;
+    const [d2] = (await sent('eve@x.in', [Q('What is an alloy?', 'Mixture of metals')])).question_ids;
     await decide('hod@x.in', [d2], 'rejected', 'Too easy.');
     const both = (await decide('hod@x.in', [d1, d2], 'pending')).rows![0].r;
     expect([both.changed.length, both.skipped.length]).toEqual([1, 1]);
@@ -250,15 +265,19 @@ describe('the HoD desk, notifications and the question bank', () => {
 
   it('an HoD with no name on record shows as "Your HoD"', async () => {
     await value('owner@x.in', `select public.admin_set_role('quiet@x.in', 'hod')`);
-    const z = (await sent('zed@x.in', [Q('What is an ore?', 'Mineral with metal')])).questions[0].question_id;
+    const [z] = (await sent('zed@x.in', [Q('What is an ore?', 'Mineral with metal')])).question_ids;
     await as('quiet@x.in', 'select public.hod_set_status($1::text[], $2, $3)', [[z], 'rejected', 'Name the metal.'], { name: null });
     expect((await notes('zed@x.in'))[0].reviewer).toBe('Your HoD');
   });
 
   it('approving 500 at once fills the question bank with every column; approving again changes nothing', async () => {
     const qs = Array.from({ length: 500 }, (_, i) => Q(`Bulk question ${i}?`, `Answer ${i}`, { topic_no: (i % 5) + 1, topic: `Topic ${(i % 5) + 1}` }));
-    const ids = (await sent('bulk@x.in', qs)).questions.map((q: Json) => q.question_id);
-    expect((await decide('hod@x.in', ids, 'approved')).rows![0].r.changed).toHaveLength(500);
+    const ids: string[] = (await sent('bulk@x.in', qs)).question_ids;
+    const done = (await decide('hod@x.in', ids, 'approved')).rows![0].r;
+    expect(done.changed).toHaveLength(500);
+    // the counts the page shows come back with the change, so it needs no more calls
+    expect(done).toMatchObject({ waiting: await count(`public.questions where status = 'pending'`), approved: await count('public.question_bank') });
+    expect(done.approved).toBeGreaterThanOrEqual(500);
     const [bank] = await admin('select * from public.question_bank where question_id = $1', [ids[0]]);
     const [row] = await admin('select * from public.questions where question_id = $1', [ids[0]]);
     for (const k of ['board', 'class', 'subject', 'chapter_no', 'chapter', 'topic_no', 'topic', 'question_no', 'question', 'answer', 'difficulty', 'chapter_id', 'topic_id']) expect(bank[k], k).toEqual(row[k]);

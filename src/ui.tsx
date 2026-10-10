@@ -239,10 +239,12 @@ export function GoogleIcon() {
   );
 }
 
-export function Logo() {
+/** Rows of questions with a tick: the same mark as the tab icon (public/favicon.svg). */
+export function Logo({ size = 28 }: { size?: number }) {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FF8000" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      <rect x="3" y="3" width="18" height="18" rx="3" /><path d="M7 8h2M11 8h6M7 12h2M11 12h6M7 16h2M11 16h6" />
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="8" fill="#FF8000" />
+      <path d="M7.5 10h10M7.5 16h10M7.5 22h6M18 21.5l3 3 5.5-6.5" fill="none" stroke="#1F1F1F" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

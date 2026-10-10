@@ -43,16 +43,17 @@ type Focus = { ids: string[]; n: number } | null;
 
 /**
  * `alerts`: the notifications (no list while loading); `fresh`: the ones that were new; `focus`: opens the bell at these
- * questions; `active`: the profile is on screen; `onSeen`: the bell was opened; `onRetry`: load them again.
+ * questions; `active`: the profile is on screen; `onSeen`: the bell was opened; `onRetry`: load them again; `onFix`:
+ * put a question back in the formatter.
  */
-export function ProfilePage({ name, email, role, profile, onChange, onSignOut, alerts, fresh, focus, active, onSeen, onRetry }: {
+export function ProfilePage({ name, email, role, profile, onChange, onSignOut, alerts, fresh, focus, active, onSeen, onRetry, onFix }: {
   name: string; email: string; role: Role; profile: Profile; onChange: (p: Partial<Profile>) => void; onSignOut: () => void;
-  alerts: Alerts; fresh: Set<string>; focus: Focus; active: boolean; onSeen: () => void; onRetry: () => void;
+  alerts: Alerts; fresh: Set<string>; focus: Focus; active: boolean; onSeen: () => void; onRetry: () => void; onFix: (a: SentBack) => void;
 }) {
   return (
     <main className="page profile">
       <section className="card stack enter me-card" aria-labelledby="me-h">
-        <Bell alerts={alerts} fresh={fresh} focus={focus} active={active} onSeen={onSeen} onRetry={onRetry} />
+        <Bell alerts={alerts} fresh={fresh} focus={focus} active={active} onSeen={onSeen} onRetry={onRetry} onFix={onFix} />
         <div className="profile-head">
           <Avatar n={profile.avatar} size={88} />
           <div>
@@ -93,8 +94,8 @@ export function ProfilePage({ name, email, role, profile, onChange, onSignOut, a
 // ---------------------------------------------------------------- notifications
 
 /** The bell on the profile card: the number of new notifications, and the list when it's open. */
-function Bell({ alerts, fresh, focus, active, onSeen, onRetry }: {
-  alerts: Alerts; fresh: Set<string>; focus: Focus; active: boolean; onSeen: () => void; onRetry: () => void;
+function Bell({ alerts, fresh, focus, active, onSeen, onRetry, onFix }: {
+  alerts: Alerts; fresh: Set<string>; focus: Focus; active: boolean; onSeen: () => void; onRetry: () => void; onFix: (a: SentBack) => void;
 }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -137,7 +138,7 @@ function Bell({ alerts, fresh, focus, active, onSeen, onRetry }: {
         <div id="alerts" className="alerts-pop" role="region" aria-labelledby="alerts-h">
           <div>
             <h2 id="alerts-h">Notifications</h2>
-            <p className="small muted">Questions your HoD sent back, and why. Fix them in the formatter and send them again.</p>
+            <p className="small muted">Questions your HoD sent back, and why. Fix each one in the formatter and send it again.</p>
           </div>
           {alerts.list ? (alerts.list.length ? (
             <ul className="sb-list">
@@ -152,6 +153,7 @@ function Bell({ alerts, fresh, focus, active, onSeen, onRetry }: {
                     Sent back by {a.reviewer}{a.reviewedAt && `, ${when(a.reviewedAt)}`}.
                     {a.now && (a.now === 'approved' ? ' Since sent again, and approved.' : ' Since sent again, and waiting for the HoD.')}
                   </p>
+                  {!a.now && <button type="button" className="btn small" onClick={() => onFix(a)}>Fix in the formatter</button>}
                 </li>
               ))}
             </ul>

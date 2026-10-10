@@ -28,10 +28,14 @@ function scrollToEl(el: HTMLElement | null) {
 /**
  * `teacher` is the signed-in person's name; `reviewer` is an HoD or the admin, who can open the HoD desk; `onSent` tells
  * the header to count the waiting questions again; `onSentBack` opens the notifications at questions that were sent back
- * to this person before.
+ * to this person before; `draft` is text to put in the Questions box ("Fix in the formatter" on a notification).
  */
-export function Formatter({ teacher, reviewer, onSent, onSentBack }: { teacher: string; reviewer: boolean; onSent: () => void; onSentBack: (ids: string[]) => void }) {
+export function Formatter({ teacher, reviewer, onSent, onSentBack, draft }: {
+  teacher: string; reviewer: boolean; onSent: () => void; onSentBack: (ids: string[]) => void; draft: { text: string; n: number } | null;
+}) {
   const [raw, setRaw] = useState('');
+  /** The text as it was last sent or downloaded: leaving the page with anything else asks first, as it isn't saved. */
+  const [kept, setKept] = useState('');
   const [done, setDone] = useState('');
   const [caret, setCaret] = useState(0);
   /** Bumped when the whole text is replaced (paste, example, clear), so the table plays its entrance again. */
@@ -93,11 +97,12 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack }: { teacher: 
     setDone(what);
     setTimeout(() => setDone((c) => (c === what ? '' : c)), 1800);
   };
-  const copy = async (what: string, value: string) => { if (await copyText(value)) flash(what); };
+  const copy = async (what: string, value: string) => { if (await copyText(value)) { flash(what); if (what === 'sheets') setKept(raw); } };
   const save = (what: 'csv' | 'json') => {
     if (what === 'csv') download(`${name}.csv`, toCSV(rows), 'text/csv');
     else download(`${name}.json`, toJSON(rows), 'application/json');
     flash(what);
+    setKept(raw);
   };
 
   /** Replacing all the text can always be undone for a few seconds, so there is no "are you sure?". */
@@ -114,10 +119,21 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack }: { teacher: 
     setBatch((b) => b + 1);
   };
 
+  // a sent-back question to fix, from the notifications (the text before it can be had back with Undo)
+  useEffect(() => { if (draft) { replaceAll(draft.text, 'Question loaded'); setSent(null); } }, [draft?.n]);
+
   /** Sends the questions to the HoD as one batch (not the example's). */
   const examples = rows.filter(fromExample).length;
   const ready = rows.filter((r) => r.chapter_id && !fromExample(r)).length;
   const noId = rows.filter((r) => !r.chapter_id && !fromExample(r)).length;
+  // the text lives only on this page: closing or reloading it with questions not yet sent or downloaded asks first
+  const unsaved = ready + noId > 0 && raw !== kept;
+  useEffect(() => {
+    if (!unsaved) return;
+    const ask = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    addEventListener('beforeunload', ask);
+    return () => removeEventListener('beforeunload', ask);
+  }, [unsaved]);
   const send = async () => {
     setSending(true);
     setSent(null);
@@ -125,6 +141,7 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack }: { teacher: 
     try {
       const result = await sendBatch(rows.filter((r) => !fromExample(r)));
       setSent(result);
+      setKept(raw);
       if (result.sent) { flash('send'); onSent(); }
     } catch (e) {
       setSendError((e as Error).message);
@@ -230,7 +247,7 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack }: { teacher: 
             {rows.length ? <RowsTable key={batch} rows={rows} /> : <p className="empty">Your questions will appear here, grouped by chapter and topic.</p>}
 
             <div className="row">
-              <button type="button" className={`btn primary${done === 'csv' ? ' is-done' : ''}`} disabled={!rows.length} onClick={() => save('csv')}>
+              <button type="button" className={`btn${done === 'csv' ? ' is-done' : ''}`} disabled={!rows.length} onClick={() => save('csv')}>
                 <ActionIcon done={done === 'csv'}><DownloadIcon /></ActionIcon>Download CSV
               </button>
               <button type="button" className={`btn${done === 'json' ? ' is-done' : ''}`} disabled={!rows.length} onClick={() => save('json')}>
@@ -267,6 +284,9 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack }: { teacher: 
                   {sent.sentBack > 0 && <>{plural(sent.sentBack, 'question was', 'questions were')} sent back to you before and {sent.sentBack === 1 ? "hasn't" : "haven't"} changed, so {sent.sentBack === 1 ? "it wasn't" : "they weren't"} sent again. <button type="button" className="linkish" onClick={() => onSentBack(sent.sentBackIds)}>See why</button> </>}
                   {reviewer && sent.sent > 0 && <Link className="linkish" href="/hod/">Open the HoD desk</Link>}
                 </p>
+              )}
+              {sent && raw.trim() && (
+                <button type="button" className="btn small quiet" onClick={() => { replaceAll('', 'Cleared'); setSent(null); box.current?.focus({ preventScroll: true }); }}>Start a new batch</button>
               )}
               {sendError && <p className="sent-note warn" role="alert">Couldn't send: {sendError}</p>}
             </form>

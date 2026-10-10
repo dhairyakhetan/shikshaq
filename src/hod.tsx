@@ -37,8 +37,8 @@ const merge = (b: Bank, more: Bank): Bank => {
 /** Puts these questions back as they were. */
 const restore = (b: Bank, qs: BankQuestion[]): Bank => ({ ...b, questions: b.questions.map((q) => qs.find((o) => o.id === q.id) ?? q) });
 
-/** `onChange` recounts the header's number. */
-export function HodDesk({ onChange }: { onChange: () => void }) {
+/** `onWaiting` puts the number waiting in the header. */
+export function HodDesk({ onWaiting }: { onWaiting: (n: number) => void }) {
   const [bank, setBank] = useState<Bank | null>(null); // the page's copy: waiting, sent back, and the approved pages loaded
   const [error, setError] = useState('');
   const [approvedTotal, setApprovedTotal] = useState<number | null>(null);
@@ -57,9 +57,9 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
   const load = useCallback(() => {
     setError('');
     // the approved pages start again once the new list is in
-    loadForHod().then((b) => { setBank(b); setOlder({ started: false, loading: false, done: false }); }, (e: Error) => setError(e.message));
+    loadForHod().then((b) => { setBank(b); setOlder({ started: false, loading: false, done: false }); onWaiting(counts(b).pending); }, (e: Error) => setError(e.message));
     recountApproved();
-  }, [recountApproved]);
+  }, [recountApproved, onWaiting]);
   useEffect(load, [load]);
 
   /** The next page of approved questions (the first when the Approved tab opens). */
@@ -105,6 +105,9 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
 
   const c = { ...counts(bank), approved: approvedTotal ?? counts(bank).approved };
 
+  /** The counts that come back with every saved change. */
+  const recounted = (r: { waiting: number; approved: number }) => { onWaiting(r.waiting); setApprovedTotal(r.approved); };
+
   /** Rows fade out, then move, and the change is saved; every action can be undone for a few seconds. */
   const act = (ids: string[], status: Status, note = '') => {
     const before = bank;
@@ -120,8 +123,7 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
     // after the row has left: questions that stayed sent back (the same question was sent again) come back
     const left = new Promise((done) => setTimeout(done, 240));
     Promise.all([saveStatus(ids, status, note), left]).then(([r]) => {
-      onChange();
-      recountApproved();
+      recounted(r);
       const kept = old.filter((q) => r.skipped.includes(q.id));
       if (!kept.length) return;
       setBank((b) => b && restore(b, kept));
@@ -130,10 +132,12 @@ export function HodDesk({ onChange }: { onChange: () => void }) {
     const did = status === 'approved' ? 'approved' : status === 'rejected' ? 'sent back' : 'moved to waiting';
     offer(`${plural(ids.length, 'question')} ${did}`, () => {
       setBank(before);
-      // put each question back as it was (questions sent back keep their own reason)
+      // put each question back as it was (questions sent back keep their own reason), one group after another, so
+      // the counts from the last one are the final counts
       const groups = new Map<string, BankQuestion[]>();
       for (const q of old) groups.set(`${q.status}\u0000${q.note}`, [...(groups.get(`${q.status}\u0000${q.note}`) ?? []), q]);
-      Promise.all([...groups.values()].map((qs) => saveStatus(qs.map((q) => q.id), qs[0].status, qs[0].note))).then(() => { onChange(); recountApproved(); }, failed);
+      [...groups.values()].reduce<Promise<{ waiting: number; approved: number } | null>>((done, qs) => done.then(() => saveStatus(qs.map((q) => q.id), qs[0].status, qs[0].note)), Promise.resolve(null))
+        .then((r) => r && recounted(r), failed);
     });
   };
 
