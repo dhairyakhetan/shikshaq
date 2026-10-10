@@ -245,6 +245,9 @@ create policy "Anyone can read the question bank" on public.question_bank for se
 -- so a question can't be filed under another board's or subject's chapters.
 create table private.boards (name text primary key, code text not null unique check (code ~ '^[A-Z]{2,5}$'));
 create table private.subjects (name text primary key, code text not null unique check (code ~ '^[A-Z]{3}$'));
+-- only the database's own functions read them (the private schema is closed to the site anyway)
+alter table private.boards enable row level security;
+alter table private.subjects enable row level security;
 insert into private.boards (name, code) values
   ('CBSE', 'CBSE'), ('ICSE', 'ICSE'), ('ISC', 'ISC'), ('NIOS', 'NIOS'), ('IB', 'IB'), ('IGCSE', 'IGCSE'),
   ('Cambridge', 'CAIE'), ('Edexcel', 'EDEX'), ('Aligarh Muslim University Board', 'AMU'),
