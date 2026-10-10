@@ -26,12 +26,12 @@ empty the pages say so.
 
 ```bash
 npm run dev      # http://localhost:5173
-npm test         # all tests (about 5 s)
+npm test         # all tests, including every database rule on a throwaway Postgres (about 5 s)
 npm run build    # typecheck + production build into dist/
 npm run stress   # 2,500 question sets of each kind through every game (about 3 min)
 ```
 
-Stack: React 19, Vite 8, TypeScript 7, vitest 5, Supabase's auth-js and postgrest-js (only these two parts, to keep the page small). Deployed on Vercel from `main` (static site, no environment variables).
+Stack: React 19, Vite 8, TypeScript 7, vitest 5, Supabase's auth-js and postgrest-js (only these two parts, to keep the page small); PGlite (Postgres in WebAssembly) for the database tests only. Deployed on Vercel from `main` (static site, no environment variables).
 
 ## How to work here
 
@@ -46,8 +46,13 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5, Supabase's auth-js and postgres
 - **No browser storage and no sample data.** No `localStorage` or `sessionStorage`, with two exceptions: the Google
   sign-in (Supabase keeps it so people stay signed in) and the profile's avatar and bio (this device only, on purpose). Never put made-up questions in the code
   or the database: the pages show only what is in the database.
+- **Change the database by editing `supabase/schema.sql`**, with a test in `tests/database.test.ts`, then give the user
+  the change to run in the Supabase SQL editor: `create or replace` for functions, in parts under 5,000 characters each
+  (long pastes get cut off), each wrapped in `begin;` … `commit;` and safe to run twice. Check it the way the repo does:
+  apply it to the committed schema on PGlite and compare with the new `schema.sql`. Never run writes on the real database
+  yourself.
 - **Keep the database's board and subject codes in step.** `private.codes_match` in `supabase/schema.sql` lists them;
-  `tests/formatter.test.ts` fails if they disagree with `src/details.ts`. Run the change in Supabase too.
+  `tests/formatter.test.ts` fails if they disagree with `src/details.ts`.
 - **Write invisible characters as escapes** (`'​'`, `' '`), never as the raw character: tools can't match or
   edit them reliably.
 
@@ -58,9 +63,9 @@ Stack: React 19, Vite 8, TypeScript 7, vitest 5, Supabase's auth-js and postgres
 | File | What it does |
 | --- | --- |
 | `index.html` | The page shell (`/hod/`, `/play/` and `/profile/` are the same page; `vercel.json` rewrites them). Connects to Supabase early (`preconnect`). `<div id="app">` is where React draws. `<main id="for-ai">` holds the chatbot instructions (baked in at build). A one-line script in `<head>` adds the `js` class before the first paint, and `.js #for-ai { display: none }` hides the instructions from people. No `hidden` attribute on purpose: some fetchers drop hidden elements. |
-| `src/main.tsx` | The app: the sign-in screen (nothing else shows until Google sign-in), the person's role (`myRole`: admin, hod or member, asked on every load), the header with the parts they may open, and the parts themselves. Also the notifications (`mySentBack`): loaded on sign-in and whenever the profile opens; opening the bell marks them seen (`markSentBackSeen`); the number of new ones goes on the avatar; arriving at the profile with new ones, or "See why" in the formatter, opens the bell (at the right question); a load that fails says so, with Try again. A part stays mounted once opened, so its text or puzzle survives a trip to another part. Revise (with the games engine) is a separate download, fetched only when an admin opens it. |
+| `src/main.tsx` | The app: the sign-in screen (nothing else shows until Google sign-in; an account with no role, i.e. not signed in with Google, is told to use Google), the person's role (`myRole`: admin, hod or member, asked on every load), the header with the parts they may open, and the parts themselves. Also the notifications (`mySentBack`): loaded on sign-in and whenever the profile opens; opening the bell marks them seen (`markSentBackSeen`); the number of new ones goes on the avatar; arriving at the profile with new ones, or "See why" in the formatter, opens the bell (at the right question); a load that fails says so, with Try again. A part stays mounted once opened, so its text or puzzle survives a trip to another part. Revise (with the games engine) is a separate download, fetched only when an admin opens it. |
 | `vite.config.ts` | Vite + React, one page. The `bake-instructions` plugin replaces `<!--INSTRUCTIONS-->` in `index.html` with `src/instructions.html`. Also the vitest config. |
-| `src/instructions.html` | Instructions for AI assistants: how to get the material, work out board/class/subject/chapter/topics, write short-answer questions, and reply in the exact format the formatter reads. Has `<pre id="format">` and `<pre id="example">`, which the tests parse. |
+| `src/instructions.html` | Instructions for AI assistants: how to get the material, work out board/class/subject/chapter/topics (the subject is the textbook's; NCERT changed its books, so say which chapter was assumed), write short-answer questions that suit puzzles (no answer inside its question, no yes/no or either-or), and reply in the exact format the formatter reads, ending with how to paste it, sign in and press Send. Has `<pre id="format">` and `<pre id="example">`, which the tests parse. Test changes the way a teacher would use them: give the site's "Copy chatbot prompt" text to a fresh assistant that knows nothing of this repo, and run its reply through `format()`. |
 | `src/formatter.tsx` | The formatter (`Formatter`), with the guide at the bottom (its link sits on the left of the header). The text (the single source of truth; not saved), the cursor line, which detail box is being typed in, undo, button feedback. Runs `format()`, decides which problems to show (`visibleIssues`), builds the notes, and handles download, copy, "Send for approval" (`sendBatch`; the example's questions are never sent, and a warning above Send says so; the batch carries the person's Google name; the note shows the new batch ID, and "See why" for questions that were sent back to this person and haven't changed), smooth scrolling and the phone "jump to results" pill. Also `Editor`, the Questions box: a transparent textarea over an exact copy of its text that carries the red/amber underlines; the copy is kept to the same width and scroll, and the note under it explains the line the cursor is on. |
 | `src/Guide.tsx` | "How to write your questions", the guide for people at the bottom of the formatter. It teaches the one format only. Board and subject code lists and limits come from the code, so they can't drift. Cards fade in as they scroll into view. |
 | `src/hod.tsx` | The HoD desk (`HodDesk`). Only HoDs and the admin get it (members don't see the link, and the database refuses them). Loads the waiting and sent-back questions (`loadForHod`); approved ones load a page at a time, newest first, when their tab opens (`loadApproved`, "Show older approved questions"), and their tab shows the bank's count (`approvedCount`). Tabs Waiting / Approved / Sent back, batches (with the teacher's email) grouped by chapter and topic, approve or send back per question or per batch, the reason box, rows sliding away, every change saved at once (`saveStatus`; a sent-back question the same as one now waiting or approved stays sent back, and the page says so) and undoable for a few seconds, "Check for new questions" when nothing is waiting, download of the whole question bank. |
@@ -105,7 +110,8 @@ it. The rules are explained for people in `docs/games.md`.
 | File | What it checks |
 | --- | --- |
 | `tests/formatter.test.ts` | `format()`: every input shape, wording kept, detail lines and tables, topic numbering, IDs, every kind of problem and its level, `visibleIssues`, output round-trips (its own CSV and TSV read back unchanged). `details.ts`: capitalising, boards, classes, subjects, codes, the four boxes (every keystroke round-trips). `db.ts`: approving, sending back and moving back to waiting on the page's copy (undo relies on the original being untouched). Duplicates, numbering and IDs are the database's job (`supabase/schema.sql`); the database's board and subject codes must match `details.ts`. |
-| `tests/instructions.test.ts` | The chatbot instructions agree with the code (columns, IDs, boards, limits, difficulty words, page labels); the template, worked example and the guide's example parse with no warnings; the hide-from-people setup in `index.html` and the build plugin. |
+| `tests/instructions.test.ts` | The chatbot instructions agree with the code (columns, IDs, boards, limits, difficulty words, the box and button names, signing in and Send); the template, worked example and the guide's example parse with no warnings, and follow the instructions' own rules (no answer inside its question, no yes/no answers); the hide-from-people setup in `index.html` and the build plugin. |
+| `tests/database.test.ts` | Every rule in `supabase/schema.sql`, on an empty in-memory Postgres (PGlite) with Supabase's sign-in stubbed: who can read and call what (signed out, not Google, member, HoD, admin, owner), sending (sizes, codes, limits, topic IDs, numbering, duplicates, batch IDs, names), sending back and notifications, resending, approving and the question bank, paging with ties, people and the owner. |
 | `tests/games.test.ts` | Each game on real questions; determinism; fallbacks; and **every checker is shown deliberately broken puzzles and must catch each one**, which is what makes the stress results mean something. |
 | `tests/games-stress.test.ts` | Ordinary and nasty question sets (words inside words, A/B-only words, palindromes, long answers, digits and Hindi, duplicates and blanks) through every game, with a report table. `STRESS=n` sets the number of sets per kind (default 40; `npm run stress` uses 2,500). |
 
@@ -131,7 +137,7 @@ applied. Change the database only by editing that file and running the change in
   them to the reason. Sent back to someone else, it goes in as new.
 - `roles`: everyone who has signed in (saved as `member` the first time) and anyone an admin added, with `role`
   admin, hod or member, their Google `name` and `last_seen_at`. Admins change it from their profile page. One admin is
-  the `owner` (set by hand in the SQL editor): nobody can remove or demote them.
+  the `owner` (set by hand in the SQL editor): nobody can remove or demote them, and they come first in the list.
 - `question_bank`: the clean final table, approved questions only, one row per question with a described column each.
   A trigger keeps it in step with `questions`; nothing else writes to it. This is the table to use elsewhere.
 
@@ -142,12 +148,13 @@ applied. Change the database only by editing that file and running the change in
 
 **Who can do what.** Row-level security is on, and the database decides, not the page.
 - Anyone, even without signing in: read `question_bank` (approved questions only). Nothing else.
-- Member (anyone signed in): also `submit_batch(questions)` (Send: a batch as themselves, skips duplicates, gives the
-  IDs; the board and subject must match the chapter ID's codes, `private.codes_match`), and their notifications:
-  `my_sent_back()` and `mark_sent_back_seen()`.
+- Member (anyone signed in with Google): also `submit_batch(questions)` (Send: a batch as themselves, skips duplicates,
+  gives the IDs and works out each topic ID itself; the board and subject must match the chapter ID's codes,
+  `private.codes_match`), and their notifications: `my_sent_back()` and `mark_sent_back_seen()`.
 - HoD: also the HoD desk: `hod_questions()` (waiting and sent back), `hod_approved(before_at, before_id, take)`
   (approved, newest first, a page at a time), `waiting_count()` and `hod_set_status(ids, new_status, reason)` (approve,
-  send back, move back to waiting; returns what changed and what was skipped).
+  send back, move back to waiting; returns what changed and what was skipped; deciding the same thing twice changes
+  nothing, so a question's approval time and the teacher's "seen" stay as they were).
 - Admin: also `admin_people()`, `admin_set_role(email, role)`, `admin_remove(email)`; the site shows them Revise. An
   admin can't remove themselves or take away their own admin role, and nobody can remove or demote the owner.
 - `my_role()` runs every time the site opens: it saves a new person as a member and returns their role.
@@ -157,6 +164,12 @@ Email provider must stay off, or someone could claim an HoD's email without prov
 
 ## Where this is going
 
-Done: the three pages on a real database, and notifications for questions sent back. This stays a standalone site.
-Waiting for the user's decision: making the same topic number mean the same topic (and a chapter number the same
-chapter name) across different teachers' batches; today the formatter numbers unnumbered topics within one paste only.
+Done: the three pages on a real database, notifications for questions sent back, and a full test sweep (the database
+rules in `npm test`; the site in a browser against a throwaway copy of the database). This stays a standalone site.
+
+On hold, by the user's choice: a fixed list of chapters to pick from, so a chapter number and name always agree, with
+IDs in the style `CBSE-10-SCI-3.3` (chapter 3, topic 3) built by the database from the chapter and topic rows. The
+subject in an ID must be the book the chapter is in: CBSE has one Science book up to class 10 and one Social Science
+book up to class 9 (four books in class 10 until 2027-28), and splits them in class 11; ICSE has separate Physics,
+Chemistry, Biology, History & Civics and Geography books from about class 6. Until then the formatter numbers unnumbered
+topics within one paste only, so two teachers can give the same topic number to different topics.

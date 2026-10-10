@@ -9,8 +9,9 @@ One page with three parts; nothing shows until you sign in with Google. Everyone
 | `/play/` **Revise** | Students | Pick the topics you studied and play a crossword, word search, matching or fill-in-the-blank puzzle made from them. |
 
 All questions live in a Supabase database: every question sent, waiting, approved or sent back, and a clean
-`question_bank` table of the approved ones. The tables, rules and functions are in `supabase/schema.sql`. Nothing is kept
-in the browser, and there is no sample data: when the bank is empty, the pages say so. Anyone can read the approved questions in `question_bank`; nothing else can be read without signing in. Teachers sign in with Google to send questions, and only HoDs and admins can open the HoD desk and approve.
+`question_bank` table of the approved ones. The tables, rules and functions are in `supabase/schema.sql`, and
+`tests/database.test.ts` runs every one of those rules on a throwaway in-memory Postgres. The browser keeps only the
+sign-in and the profile's avatar and bio, and there is no sample data: when the bank is empty, the pages say so. Anyone can read the approved questions in `question_bank`; nothing else can be read without signing in. Teachers sign in with Google to send questions, and only HoDs and admins can open the HoD desk and approve.
 
 The pages use Shikshaq's look (its colours, fonts, pill buttons, shadows and motion timings). This is a standalone site.
 
@@ -147,7 +148,7 @@ the page), if the template, the worked example or the guide's example would prod
 `src/games/` makes matching, fill-in-the-blank, word search and crossword puzzles from bank questions, on the student's
 device, with no AI: the same questions and seed always give the same puzzle. Every game has a maker and a separate
 checker, and a puzzle is only returned after its checker passes it; otherwise it is made again with a new seed, then the
-next game is tried. Revise uses it; it has no page code, so the same files can go into Shikshaq. The rules for each game, the guarantee and the stress results are in [docs/games.md](docs/games.md).
+next game is tried. Revise uses it; it has no page code, so it can be used anywhere. The rules for each game, the guarantee and the stress results are in [docs/games.md](docs/games.md).
 
 ```ts
 import { makePuzzle, seedOf, sameAnswer } from './src/games';
@@ -160,14 +161,15 @@ const puzzle = makePuzzle(questions, seedOf(`${studentId}|${date}|${topicIds}`))
 ## Deploy to Vercel
 
 Import the repo in Vercel; the Vite preset is detected (build `npm run build`, output `dist`). No environment variables.
-`vercel.json` adds security headers and long-lived caching for hashed assets. Fonts are bundled, so the page makes no third-party requests.
+`vercel.json` adds security headers and long-lived caching for hashed assets. Fonts are bundled, so the only other site the page talks to is its Supabase database.
 
 ## Develop
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test
+npm test           # formatter, chatbot instructions, database rules and games (about 5 s)
+npm run stress     # 2,500 question sets of each kind through every game (about 3 min)
 npm run build      # typecheck + production build into dist/
 ```
 

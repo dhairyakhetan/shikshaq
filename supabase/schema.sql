@@ -69,14 +69,14 @@ begin
   return (select r.role from public.roles r where r.email = mail);
 end $$;
 
--- the admin's list of people
+-- the admin's list of people: the owner, then admins, HoDs and members
 create function public.admin_people() returns jsonb language plpgsql stable security definer set search_path = ''
 as $$
 begin
   if private.role() is distinct from 'admin' then raise exception 'Only the admin can see this.'; end if;
   return coalesce((
     select jsonb_agg(jsonb_build_object('email', r.email, 'name', r.name, 'role', r.role, 'owner', r.owner, 'added_at', r.added_at, 'last_seen_at', r.last_seen_at)
-                     order by case r.role when 'admin' then 0 when 'hod' then 1 else 2 end, coalesce(r.name, r.email))
+                     order by r.owner desc, case r.role when 'admin' then 0 when 'hod' then 1 else 2 end, coalesce(r.name, r.email))
     from public.roles r
   ), '[]');
 end $$;
@@ -298,7 +298,7 @@ declare
   back_ids text[] := '{}';
   added jsonb := '[]';
 begin
-  if auth.uid() is null or mail is null then raise exception 'Please sign in first.'; end if;
+  if private.role() is null or mail is null then raise exception 'Please sign in first.'; end if;
   who := left(who, 80);
   if jsonb_typeof(questions) is distinct from 'array' or jsonb_array_length(questions) not between 1 and 500 then
     raise exception 'Send between 1 and 500 questions at a time.';
@@ -335,7 +335,8 @@ begin
     select coalesce(max(x.question_no), 0) + 1 into n from public.questions x where x.chapter_id = cid and x.topic_no is not distinct from tno;
     insert into public.questions (question_id, batch_id, chapter_id, topic_id, board, class, subject, chapter_no, chapter,
                                   topic_no, topic, question_no, question, answer, difficulty)
-    values (cid || 'T' || lpad(coalesce(tno, 0)::text, 2, '0') || 'Q' || lpad(n::text, 3, '0'), bid, cid, q->>'topic_id',
+    values (cid || 'T' || lpad(coalesce(tno, 0)::text, 2, '0') || 'Q' || lpad(n::text, 3, '0'), bid, cid,
+            case when tno is null then null else cid || 'T' || lpad(tno::text, 2, '0') end,
             q->>'board', (q->>'class')::int, q->>'subject', (q->>'chapter_no')::int, q->>'chapter', tno, coalesce(q->>'topic', ''),
             n, qtext, btrim(q->>'answer'), q->>'difficulty')
     returning * into r;
@@ -421,6 +422,8 @@ begin
         reviewed_by = case when new_status = 'pending' then null else lower(auth.jwt() ->> 'email') end,
         seen_at = null
     where q.question_id = any(ids) and q.question_id <> all(skipped)
+      -- nothing to do when it already has this status (and this reason): its time and "seen" stay as they are
+      and (q.status is distinct from new_status or (new_status = 'rejected' and q.note is distinct from why))
     returning q.question_id
   )
   select coalesce(jsonb_agg(changed.question_id), '[]') into done from changed;

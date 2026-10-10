@@ -33,7 +33,8 @@ function App() {
   const [role, setRole] = useState<{ role?: Role | null; error?: string }>({});
   useEffect(() => {
     setRole({});
-    if (who) myRole().then((r) => setRole({ role: r }), (e: Error) => setRole({ error: e.message }));
+    // no role means the account didn't sign in with Google, which is the only way in
+    if (who) myRole().then((r) => setRole(r ? { role: r } : { error: 'Please sign in with a Google account.' }), (e: Error) => setRole({ error: e.message }));
   }, [who]);
   const reviewer = role.role === 'hod' || role.role === 'admin';
   // the number of questions waiting, next to the HoD desk link: asked once the role is known, and after a send or an approval
