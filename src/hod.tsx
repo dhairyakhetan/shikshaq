@@ -148,7 +148,7 @@ export function HodDesk({ onWaiting }: { onWaiting: (n: number) => void }) {
   const whyBox = (where: string, ids: string[]) => (back?.where === where ? (
     <form className="why" onSubmit={(e) => { e.preventDefault(); if (reason.trim()) act(ids, 'rejected', reason); }}>
       <label htmlFor={`why-${where}`}>Why {ids.length > 1 ? 'are these' : 'is this'} going back? The teacher will see this.</label>
-      <textarea id={`why-${where}`} rows={2} value={reason} autoFocus onChange={(e) => setReason(e.target.value)} placeholder="e.g. The answer should be Rusting, not Rust." />
+      <textarea id={`why-${where}`} rows={2} maxLength={500} value={reason} autoFocus onChange={(e) => setReason(e.target.value)} placeholder="e.g. The answer should be Rusting, not Rust." />
       <div className="row">
         <button type="submit" className="btn small danger" disabled={!reason.trim()}>Send back</button>
         <button type="button" className="btn small quiet" onClick={() => setBack(null)}>Cancel</button>

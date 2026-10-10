@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { BOARDS, MAX_NAME, MAX_NO, STATES, SUBJECTS } from './details';
+import { ALL_BOARDS, MAX_NAME, MAX_NO, SUBJECTS } from './details';
 import { MAX_ANSWER, MAX_QUESTION } from './format';
 
 /** How to write questions for this site: for people. (Chatbots get their own instructions in the page's HTML.) */
@@ -47,11 +47,11 @@ Reaction in which a single reactant breaks down into simpler products | Decompos
           <p>Each one applies to every question below it, until it is changed.</p>
           <dl className="rules">
             <dt><code>Board: CBSE</code></dt>
-            <dd>CBSE, ICSE, ISC, IB, IGCSE, Cambridge, NIOS, or a state board such as <i>Maharashtra</i>.</dd>
+            <dd>CBSE, ICSE, ISC, IB, IGCSE, Cambridge, Edexcel, NIOS, a state board such as <i>Maharashtra</i>, or another board on the list below.</dd>
             <dt><code>Class: 10</code></dt>
             <dd>1 to 12.</dd>
             <dt><code>Subject: Chemistry</code></dt>
-            <dd>The subject's full name.</dd>
+            <dd>The textbook's subject, as in the list below.</dd>
             <dt><code>Chapter 3: Acids, Bases and Salts</code></dt>
             <dd>Number and name, as in the textbook.</dd>
             <dt><code>Topic 2: Indicators</code></dt>
@@ -74,8 +74,8 @@ Reaction in which a single reactant breaks down into simpler products | Decompos
 
         <article className="g-card">
           <h3>Underlines and warnings</h3>
-          <p><span className="mark error">Red</span>: the line is <b>left out</b>. It has no answer, no question, an empty part, too many parts, is too long, is a repeat, or the class is not 1 to 12.</p>
-          <p><span className="mark warn">Amber</span>: the line is <b>kept, but check it</b>. An unknown board or subject, a chapter with no number, a topic with no questions, a detail set twice, or the same chapter number with two different names.</p>
+          <p><span className="mark error">Red</span>: the line is <b>left out</b>. It has no answer, no question, an empty part, too many parts, is too long, is a repeat, the class is not 1 to 12, or the board or subject isn't on the site's list.</p>
+          <p><span className="mark warn">Amber</span>: the line is <b>kept, but check it</b>. A chapter with no number or name, a topic with no questions, a detail set twice, or the same chapter number with two different names.</p>
           <p className="small muted">You can write first: a line is only checked once you move on from it, and a box once you leave it or pause. Put the cursor on an underlined line to see why, or click a line number in the list.</p>
         </article>
 
@@ -89,14 +89,13 @@ Reaction in which a single reactant breaks down into simpler products | Decompos
           <details>
             <summary>Board codes</summary>
             <p className="codes">
-              {BOARDS.map((b) => <span key={b.code}><b>{b.code}</b> {b.name}</span>)}
-              {STATES.map((s) => <span key={s.code}><b>{s.code}</b> {s.name}</span>)}
+              {ALL_BOARDS.map((b) => <span key={b.code}><b>{b.code}</b> {b.name}</span>)}
             </p>
           </details>
           <details>
             <summary>Subject codes</summary>
             <p className="codes">{SUBJECTS.map((s) => <span key={s.code}><b>{s.code}</b> {s.name}</span>)}</p>
-            <p className="small muted">Any other subject gets a code made from its name. Spell it the same way every time.</p>
+            <p className="small muted">Only boards and subjects on these lists can be used. If yours is missing, tell the site's admin.</p>
           </details>
         </article>
 

@@ -60,79 +60,134 @@ export const MAX_NO = 99;
 export const MAX_NAME = 120;
 
 // ---------------------------------------------------------------- boards
+// From COBSE's list of recognised boards (cobse.net.in) and the boards' own names. A board not on these lists can't be
+// used: the formatter says so, and the database refuses it (private.boards in supabase/schema.sql has the same list).
 
-export const BOARDS: { name: string; code: string; also: string[] }[] = [
+export interface Board { name: string; code: string; also: string[] }
+
+/** National and international boards, and the recognised boards run by universities. */
+export const BOARDS: Board[] = [
   { name: 'CBSE', code: 'CBSE', also: ['central board of secondary education', 'ncert'] },
-  { name: 'ICSE', code: 'ICSE', also: ['cisce'] },
-  { name: 'ISC', code: 'ISC', also: [] },
-  { name: 'IB', code: 'IB', also: ['international baccalaureate'] },
-  { name: 'IGCSE', code: 'IGCSE', also: ['cambridge igcse'] },
-  { name: 'Cambridge', code: 'CAIE', also: ['caie', 'cie', 'cambridge international', 'a level', 'a levels'] },
+  { name: 'ICSE', code: 'ICSE', also: ['cisce', 'indian certificate of secondary education', 'council for the indian school certificate examinations'] },
+  { name: 'ISC', code: 'ISC', also: ['indian school certificate'] },
   { name: 'NIOS', code: 'NIOS', also: ['national institute of open schooling'] },
+  { name: 'IB', code: 'IB', also: ['international baccalaureate', 'ib diploma', 'ib dp', 'ib myp', 'ib pyp'] },
+  { name: 'IGCSE', code: 'IGCSE', also: ['cambridge igcse', 'international gcse'] },
+  { name: 'Cambridge', code: 'CAIE', also: ['caie', 'cie', 'cambridge international', 'cambridge assessment international education', 'a level', 'a levels', 'as level', 'o level', 'o levels'] },
+  { name: 'Edexcel', code: 'EDEX', also: ['pearson edexcel', 'pearson', 'edexcel igcse', 'international a level', 'international a levels'] },
+  { name: 'Aligarh Muslim University Board', code: 'AMU', also: ['amu', 'aligarh muslim university', 'amu board of secondary and senior secondary education'] },
+  { name: 'Jamia Millia Islamia', code: 'JMI', also: ['jmi', 'jamia'] },
+  { name: 'Banasthali Vidyapith', code: 'BANV', also: ['banasthali'] },
+  { name: 'Dayalbagh Educational Institute', code: 'DEI', also: ['dei', 'dayalbagh'] },
+  { name: 'Maharishi Patanjali Sanskrit Sansthan', code: 'MPSS', also: ['mpss'] },
 ];
 
-/** State boards: the state's name and its two-letter code, plus the board's own short names. */
-export const STATES: { name: string; code: string; also: string[] }[] = [
-  { name: 'Andhra Pradesh', code: 'AP', also: ['bseap', 'bieap'] },
-  { name: 'Arunachal Pradesh', code: 'AR', also: [] },
+/** Each state's main school board: the state's name and its two-letter code, plus the board's own names. */
+export const STATES: Board[] = [
+  { name: 'Andhra Pradesh', code: 'AP', also: ['bseap', 'bieap', 'ap'] },
   { name: 'Assam', code: 'AS', also: ['seba', 'ahsec'] },
-  { name: 'Bihar', code: 'BR', also: ['bseb'] },
+  { name: 'Bihar', code: 'BR', also: ['bseb', 'bihar board'] },
   { name: 'Chhattisgarh', code: 'CG', also: ['cgbse'] },
-  { name: 'Delhi', code: 'DL', also: [] },
+  { name: 'Delhi', code: 'DL', also: ['dbse', 'delhi board of school education'] },
   { name: 'Goa', code: 'GA', also: ['gbshse'] },
-  { name: 'Gujarat', code: 'GJ', also: ['gseb'] },
+  { name: 'Gujarat', code: 'GJ', also: ['gseb', 'gshseb'] },
   { name: 'Haryana', code: 'HR', also: ['hbse', 'bseh'] },
-  { name: 'Himachal Pradesh', code: 'HP', also: ['hpbose'] },
+  { name: 'Himachal Pradesh', code: 'HP', also: ['hpbose', 'hp'] },
   { name: 'Jammu and Kashmir', code: 'JK', also: ['jkbose', 'j and k'] },
   { name: 'Jharkhand', code: 'JH', also: ['jac'] },
-  { name: 'Karnataka', code: 'KA', also: ['kseeb', 'kseab'] },
+  { name: 'Karnataka', code: 'KA', also: ['kseeb', 'kseab', 'dpue', 'karnataka puc'] },
   { name: 'Kerala', code: 'KL', also: ['kbpe', 'dhse'] },
-  { name: 'Madhya Pradesh', code: 'MP', also: ['mpbse'] },
+  { name: 'Madhya Pradesh', code: 'MP', also: ['mpbse', 'mp'] },
   { name: 'Maharashtra', code: 'MH', also: ['msbshse'] },
-  { name: 'Manipur', code: 'MN', also: ['bosem', 'cohsem'] },
+  { name: 'Manipur', code: 'MN', also: ['bosem', 'bsem', 'cohsem'] },
   { name: 'Meghalaya', code: 'ML', also: ['mbose'] },
   { name: 'Mizoram', code: 'MZ', also: ['mbse'] },
   { name: 'Nagaland', code: 'NL', also: ['nbse'] },
-  { name: 'Odisha', code: 'OD', also: ['orissa', 'chse'] },
+  { name: 'Odisha', code: 'OD', also: ['orissa', 'bse odisha', 'chse', 'chse odisha'] },
   { name: 'Punjab', code: 'PB', also: ['pseb'] },
   { name: 'Rajasthan', code: 'RJ', also: ['rbse', 'bser'] },
-  { name: 'Sikkim', code: 'SK', also: [] },
-  { name: 'Tamil Nadu', code: 'TN', also: ['tnbse', 'samacheer', 'samacheer kalvi'] },
-  { name: 'Telangana', code: 'TS', also: ['bsets', 'tsbie'] },
+  { name: 'Tamil Nadu', code: 'TN', also: ['tnbse', 'samacheer', 'samacheer kalvi', 'dge tn', 'tn'] },
+  { name: 'Telangana', code: 'TS', also: ['bsets', 'bse ts', 'tsbie'] },
   { name: 'Tripura', code: 'TR', also: ['tbse'] },
   { name: 'Uttar Pradesh', code: 'UP', also: ['upmsp', 'up'] },
-  { name: 'Uttarakhand', code: 'UK', also: ['ubse'] },
-  { name: 'West Bengal', code: 'WB', also: ['wbbse', 'wbchse'] },
+  { name: 'Uttarakhand', code: 'UK', also: ['ubse', 'uttaranchal'] },
+  { name: 'West Bengal', code: 'WB', also: ['wbbse', 'wbchse', 'wb'] },
 ];
 
-const key = (s: string) => tidy(s).toLowerCase().replace(/&/g, ' and ').replace(/[.]/g, '').replace(/\s+/g, ' ').trim();
-const words = (s: string) => new RegExp(`(^|[^a-z])${s.replace(/[&]/g, '\\$&')}($|[^a-z])`);
-const STATE_ALIASES = STATES.flatMap((s) => [key(s.name), ...s.also].map((a) => ({ a, s })));
-const BOARD_LIST = 'CBSE, ICSE, ISC, IB, IGCSE, Cambridge, NIOS or a state board such as Maharashtra';
+/** Places whose schools follow another board (usually CBSE), so a "state board" for them is a mistake. */
+const NO_BOARD = ['arunachal pradesh', 'sikkim', 'ladakh', 'puducherry', 'pondicherry', 'chandigarh', 'andaman and nicobar', 'lakshadweep', 'dadra and nagar haveli', 'daman and diu'];
 
-/** Letters for a made-up code: one word → its first letters, several → their initials. */
-function madeCode(name: string, len: number): string | null {
-  const ws = name.normalize('NFKD').replace(/[^A-Za-z\s]/g, ' ').split(/\s+/).filter((w) => w && !['and', 'of', 'the', 'board'].includes(w.toLowerCase()));
-  if (!ws.length) return null;
-  // a board (5 letters) uses initials for a long name; a subject (3 letters) mixes the first word with the next initial
-  const code = ws.length === 1 ? ws[0].slice(0, len) : len > 3 || ws.length > 2 ? ws.slice(0, len).map((w) => w[0]).join('') : ws[0].slice(0, len - 1) + ws[1][0];
-  return code.toUpperCase().padEnd(len === 3 ? 3 : 2, 'X');
-}
+type Kind = 'open' | 'madrasa' | 'sanskrit';
+/** A state's other recognised boards: open schools, madrasa boards and Sanskrit boards. */
+export const STATE_BOARDS: (Board & { state: string; kind: Kind })[] = [
+  { state: 'Andhra Pradesh', kind: 'open', name: 'Andhra Pradesh Open School Society', code: 'APOSS', also: ['aposs'] },
+  { state: 'Bihar', kind: 'open', name: 'Bihar Board of Open Schooling and Examination', code: 'BBOSE', also: ['bbose'] },
+  { state: 'Chhattisgarh', kind: 'open', name: 'Chhattisgarh State Open School', code: 'CGSOS', also: ['cgsos'] },
+  { state: 'Madhya Pradesh', kind: 'open', name: 'Madhya Pradesh State Open School', code: 'MPSOS', also: ['mpsos'] },
+  { state: 'Rajasthan', kind: 'open', name: 'Rajasthan State Open School', code: 'RSOS', also: ['rsos'] },
+  { state: 'Telangana', kind: 'open', name: 'Telangana Open School Society', code: 'TOSS', also: ['toss'] },
+  { state: 'Bihar', kind: 'madrasa', name: 'Bihar State Madrasa Education Board', code: 'BSMEB', also: ['bsmeb'] },
+  { state: 'Chhattisgarh', kind: 'madrasa', name: 'Chhattisgarh Madrasa Board', code: 'CGMB', also: [] },
+  { state: 'Uttar Pradesh', kind: 'madrasa', name: 'Uttar Pradesh Board of Madrasa Education', code: 'UPBME', also: ['upbme'] },
+  { state: 'Uttarakhand', kind: 'madrasa', name: 'Uttarakhand Madrasa Education Board', code: 'UKMEB', also: [] },
+  { state: 'West Bengal', kind: 'madrasa', name: 'West Bengal Board of Madrasah Education', code: 'WBBME', also: ['wbbme'] },
+  { state: 'Bihar', kind: 'sanskrit', name: 'Bihar Sanskrit Shiksha Board', code: 'BSSB', also: ['bssb'] },
+  { state: 'Chhattisgarh', kind: 'sanskrit', name: 'Chhattisgarh Sanskrit Board', code: 'CGSB', also: [] },
+  { state: 'Uttar Pradesh', kind: 'sanskrit', name: 'Uttar Pradesh Madhyamik Sanskrit Shiksha Parishad', code: 'UPSSP', also: ['upmssp'] },
+  { state: 'Uttarakhand', kind: 'sanskrit', name: 'Uttarakhand Sanskrit Shiksha Parishad', code: 'USSP', also: ['ussp'] },
+];
 
+/** Every board, by the name the site writes it with (a state's main board is "Maharashtra State Board"). */
+export const ALL_BOARDS: Board[] = [...BOARDS, ...STATES.map((s) => ({ ...s, name: `${s.name} State Board` })), ...STATE_BOARDS];
+
+const key = (s: string) => tidy(s).normalize('NFC').toLowerCase().replace(/&/g, ' and ').replace(/[.]/g, '').replace(/\s+/g, ' ').trim();
+const words = (s: string) => new RegExp(`(^|[^a-z])${s}($|[^a-z])`);
+const tokens = (s: string) => s.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+/** Words that only say "it's a board": "Bihar School Examination Board" is just the Bihar board. */
+const FILLER = new Set(['a', 'the', 'of', 'and', 'for', 'board', 'boards', 'state', 'council', 'school', 'schools', 'schooling', 'secondary', 'higher',
+  'senior', 'intermediate', 'education', 'educational', 'examination', 'examinations', 'exam', 'exams', 'academic', 'syllabus', 'curriculum', 'govt',
+  'government', 'department', 'dept', 'puc', 'society', 'madhyamik', 'uchch', 'shiksha', 'parishad', 'pariksha']);
+const PHRASES = /\b(public examinations?|high school|pre[- ]university)\b/g; // "Kerala Board of Public Examination", "U.P. Board of High School"
+const KINDS: Record<Kind, string[]> = { open: ['open'], madrasa: ['madrasa', 'madrassa', 'madarsa', 'madrasah', 'madarasa'], sanskrit: ['sanskrit'] };
+const BOARD_NAMES = ALL_BOARDS.flatMap((b) => [key(b.name), ...b.also].map((a) => ({ a, b })));
+const STATE_ALIASES = STATES.flatMap((s) => [key(s.name), ...s.also].map((a) => ({ a, s }))).sort((x, y) => y.a.length - x.a.length);
+
+/** The board named in a box or a line, or an error: only boards on the lists above can be used. */
 export function checkBoard(raw: string): { name: string; code: string | null; problem?: Problem } {
   const k = key(raw);
   if (!k) return { name: '', code: null };
   const kk = k.replace(/\bboard\b/g, ' ').replace(/\s+/g, ' ').trim();
-  const known = BOARDS.find((b) => [k, kk].some((x) => x === key(b.name) || b.also.includes(x)));
+  const known = BOARD_NAMES.find(({ a }) => a === k || a === kk)?.b;
   if (known) return { name: known.name, code: known.code };
-  const state = STATE_ALIASES.find(({ a }) => words(a).test(k))?.s;
-  if (state) return { name: `${state.name} State Board`, code: state.code };
-  if (/^(state|state board|board)$/.test(k)) return { name: tidy(raw), code: null, problem: { level: 'warn', text: 'Which state? For example: Maharashtra State Board.' } };
-  const near = BOARDS.find((b) => distance(k, key(b.name)) === 1 && k.length >= 3);
-  const name = /^[a-z]{2,6}$/.test(k) ? k.toUpperCase() : titleCase(tidy(raw));
-  const code = madeCode(name, 5);
-  if (!code) return { name, code, problem: { level: 'warn', text: 'Write the board in English letters, so it can go in the chapter ID.' } };
-  return { name, code, problem: { level: 'warn', text: near ? `Did you mean ${near.name}?` : `Not a board this site knows (${BOARD_LIST}). Its code ${code} was made from the name.` } };
+  // a state's board, written its own way: "Bihar School Examination Board", "State Board (Maharashtra)", "Kerala syllabus",
+  // and its other boards by their kind: "UP madrasa board". A school's name ("Delhi Public School") is not a board.
+  const at = STATE_ALIASES.find(({ a }) => words(a).test(k));
+  if (at) {
+    const rest = tokens(k.replace(PHRASES, ' ').replace(words(at.a), ' ')).filter((w) => !FILLER.has(w));
+    if (!rest.length) return { name: `${at.s.name} State Board`, code: at.s.code };
+    const other = STATE_BOARDS.find((b) => b.state === at.s.name && rest.every((w) => KINDS[b.kind].includes(w)));
+    if (other) return { name: other.name, code: other.code };
+  }
+  const name = tidy(raw);
+  const error = (text: string) => ({ name, code: null, problem: { level: 'error' as const, text } });
+  if (tokens(k).every((w) => FILLER.has(w))) return error('Which state? For example: Maharashtra State Board.');
+  const none = NO_BOARD.find((p) => words(p).test(k));
+  if (none) return error(`${titleCase(none)} has no school board of its own. Write the board the school follows, such as CBSE.`);
+  const near = closest(k, [...BOARD_NAMES.map(({ a, b }) => ({ a, name: b.name })), ...STATES.map((x) => ({ a: key(x.name), name: `${x.name} State Board` }))]);
+  if (near) return error(`Did you mean ${near}?`);
+  return error(`"${name}" isn't a board on this site's list. Write the board the textbook is for, such as CBSE, ICSE or Maharashtra State Board. The guide lists them all.`);
+}
+
+/** The name whose spelling is nearest, if it is only a letter or two away (two only for long names). */
+function closest(k: string, names: { a: string; name: string }[]): string | undefined {
+  if (k.length < 3) return undefined;
+  let best: { d: number; name: string } | undefined;
+  for (const { a, name } of names) {
+    if (a.length < 3) continue;
+    const d = distance(k, a);
+    if (d <= (a.length >= 8 ? 2 : 1) && (!best || d < best.d)) best = { d, name };
+  }
+  return best?.name;
 }
 
 // ---------------------------------------------------------------- class
@@ -154,68 +209,193 @@ export function checkClass(raw: string): { value: number | null; problem?: Probl
 }
 
 // ---------------------------------------------------------------- subjects
+// The subjects of the textbooks and syllabuses of CBSE (its academic, language and skill subjects), CISCE (ICSE and
+// ISC), NIOS, the state boards, Cambridge, Edexcel and IB. Each has a fixed three-letter code (languages mostly use
+// their ISO 639 codes). A subject not on this list can't be used: the formatter says so, and the database refuses it
+// (private.subjects in supabase/schema.sql has the same list).
 
 export const SUBJECTS: { name: string; code: string; also: string[] }[] = [
-  { name: 'Physics', code: 'PHY', also: ['phy', 'phys'] },
-  { name: 'Chemistry', code: 'CHE', also: ['chem'] },
-  { name: 'Biology', code: 'BIO', also: ['bio'] },
-  { name: 'Mathematics', code: 'MAT', also: ['maths', 'math'] },
-  { name: 'Science', code: 'SCI', also: ['general science', 'sci'] },
-  { name: 'Social Science', code: 'SST', also: ['sst', 'social studies', 'social'] },
-  { name: 'English', code: 'ENG', also: ['eng'] },
-  { name: 'English Language', code: 'ENL', also: [] },
-  { name: 'English Literature', code: 'ELT', also: ['literature in english'] },
-  { name: 'Hindi', code: 'HIN', also: [] },
-  { name: 'Sanskrit', code: 'SAN', also: [] },
-  { name: 'History', code: 'HIS', also: ['hist'] },
-  { name: 'Geography', code: 'GEO', also: ['geo'] },
-  { name: 'Civics', code: 'CIV', also: [] },
-  { name: 'History and Civics', code: 'HCV', also: [] },
-  { name: 'Political Science', code: 'POL', also: ['pol sci', 'polity'] },
-  { name: 'Economics', code: 'ECO', also: ['eco'] },
-  { name: 'Computer Science', code: 'CSC', also: ['cs', 'comp sci', 'computer'] },
-  { name: 'Computer Applications', code: 'CAP', also: [] },
+  { name: 'Physics', code: 'PHY', also: ['phy', 'phys', 'भौतिकी', 'भौतिक विज्ञान'] },
+  { name: 'Chemistry', code: 'CHE', also: ['chem', 'रसायन', 'रसायन विज्ञान'] },
+  { name: 'Biology', code: 'BIO', also: ['bio', 'life science', 'life sciences', 'जीव विज्ञान'] },
+  { name: 'Mathematics', code: 'MAT', also: ['maths', 'math', 'mathematics standard', 'mathematics basic', 'maths standard', 'maths basic', 'standard mathematics', 'basic mathematics', 'international mathematics', 'गणित'] },
+  { name: 'Applied Mathematics', code: 'AMA', also: ['applied maths', 'applied math'] },
+  { name: 'Additional Mathematics', code: 'ADM', also: ['additional maths', 'add maths'] },
+  { name: 'Further Mathematics', code: 'FMA', also: ['further maths'] },
+  { name: 'Statistics', code: 'STA', also: ['stats'] },
+  { name: 'Science', code: 'SCI', also: ['general science', 'sci', 'science and technology', 'combined science', 'coordinated science', 'co-ordinated science', 'integrated science', 'विज्ञान'] },
+  { name: 'Environmental Studies', code: 'EVS', also: ['evs', 'the world around us', 'looking around'] },
+  { name: 'Environmental Science', code: 'ENV', also: ['environmental systems and societies', 'environmental education'] },
+  { name: 'Environmental Management', code: 'EMG', also: [] },
+  { name: 'Biotechnology', code: 'BTE', also: ['biotech'] },
+  { name: 'Computer Science', code: 'CSC', also: ['cs', 'comp sci', 'computer', 'computers', 'computer studies', 'computing'] },
+  { name: 'Computer Applications', code: 'CAP', also: ['computer application'] },
   { name: 'Informatics Practices', code: 'INP', also: ['ip'] },
-  { name: 'Accountancy', code: 'ACC', also: ['accounts', 'accounting'] },
-  { name: 'Business Studies', code: 'BST', also: ['bst'] },
-  { name: 'Commercial Studies', code: 'COM', also: [] },
-  { name: 'Environmental Studies', code: 'EVS', also: ['evs'] },
-  { name: 'Environmental Science', code: 'ENV', also: [] },
-  { name: 'Statistics', code: 'STA', also: [] },
-  { name: 'Psychology', code: 'PSY', also: [] },
+  { name: 'Information Technology', code: 'ITE', also: ['it', 'ict', 'information and communication technology', 'digital society'] },
+  { name: 'Artificial Intelligence', code: 'AIN', also: ['ai'] },
+  { name: 'Data Science', code: 'DSC', also: [] },
+  { name: 'Robotics', code: 'ROB', also: ['robotics and ai', 'robotics and artificial intelligence'] },
+  { name: 'Web Applications', code: 'WEB', also: ['web application'] },
+  { name: 'Data Entry Operations', code: 'DEO', also: [] },
+  { name: 'Engineering Graphics', code: 'EGR', also: [] },
+  { name: 'Engineering Science', code: 'ESC', also: [] },
+  { name: 'Electricity and Electronics', code: 'EEL', also: [] },
+  { name: 'Technical Drawing', code: 'TDR', also: ['technical drawing applications'] },
+  { name: 'Geometrical and Mechanical Drawing', code: 'GMD', also: [] },
+  { name: 'Geometrical and Building Drawing', code: 'GBD', also: [] },
+  { name: 'Design and Technology', code: 'DTE', also: [] },
+  { name: 'Social Science', code: 'SST', also: ['sst', 'social studies', 'social', 'social sciences', 'सामाजिक विज्ञान'] },
+  { name: 'History', code: 'HIS', also: ['hist', 'इतिहास'] },
+  { name: 'Geography', code: 'GEO', also: ['geo', 'भूगोल'] },
+  { name: 'Civics', code: 'CIV', also: ['citizenship', 'citizenship studies'] },
+  { name: 'History and Civics', code: 'HCV', also: [] },
+  { name: 'Political Science', code: 'POL', also: ['pol sci', 'polity', 'politics', 'global politics', 'राजनीति विज्ञान'] },
+  { name: 'Economics', code: 'ECO', also: ['eco', 'economic', 'अर्थशास्त्र'] },
   { name: 'Sociology', code: 'SOC', also: [] },
-  { name: 'Physical Education', code: 'PED', also: ['pe'] },
-  { name: 'Biotechnology', code: 'BTE', also: [] },
-  { name: 'Home Science', code: 'HSC', also: [] },
-  { name: 'Legal Studies', code: 'LGS', also: [] },
+  { name: 'Psychology', code: 'PSY', also: [] },
+  { name: 'Philosophy', code: 'PHI', also: [] },
+  { name: 'Anthropology', code: 'ANT', also: ['social and cultural anthropology'] },
+  { name: 'Religious Studies', code: 'REL', also: ['religious education', 'religion'] },
+  { name: 'Global Perspectives', code: 'GLP', also: [] },
+  { name: 'Theory of Knowledge', code: 'TOK', also: ['tok'] },
+  { name: 'Legal Studies', code: 'LGS', also: ['law'] },
+  { name: 'Knowledge Traditions and Practices of India', code: 'KTP', also: [] },
+  { name: 'Indian Culture and Heritage', code: 'ICH', also: [] },
   { name: 'General Knowledge', code: 'GKN', also: ['gk'] },
-  { name: 'French', code: 'FRE', also: [] },
-  { name: 'German', code: 'GER', also: [] },
-  { name: 'Marathi', code: 'MAR', also: [] },
-  { name: 'Bengali', code: 'BEN', also: [] },
+  { name: 'Moral Science', code: 'MSC', also: ['moral education', 'value education', 'values education'] },
+  { name: 'Accountancy', code: 'ACC', also: ['accounts', 'accounting'] },
+  { name: 'Business Studies', code: 'BST', also: ['bst', 'business', 'business management', 'business and management'] },
+  { name: 'Commerce', code: 'CMR', also: [] },
+  { name: 'Commercial Studies', code: 'COM', also: [] },
+  { name: 'Commercial Applications', code: 'CMA', also: [] },
+  { name: 'Economic Applications', code: 'ECA', also: [] },
+  { name: 'Entrepreneurship', code: 'ENT', also: [] },
+  { name: 'Business Administration', code: 'BAD', also: [] },
+  { name: 'Taxation', code: 'TAX', also: [] },
+  { name: 'Cost Accounting', code: 'CAC', also: [] },
+  { name: 'Financial Markets', code: 'FIN', also: ['financial markets management', 'introduction to financial markets', 'financial literacy'] },
+  { name: 'Banking', code: 'BNK', also: ['banking and insurance'] },
+  { name: 'Insurance', code: 'INS', also: [] },
+  { name: 'Marketing', code: 'MKT', also: ['marketing and sales'] },
+  { name: 'Salesmanship', code: 'SLS', also: [] },
+  { name: 'Office Procedures and Practices', code: 'OPP', also: [] },
+  { name: 'Shorthand', code: 'SHO', also: ['shorthand english', 'shorthand hindi', 'stenography'] },
+  { name: 'Retail', code: 'RET', also: ['retail store operations'] },
+  { name: 'Tourism', code: 'TOU', also: ['introduction to tourism', 'travel and tourism'] },
+  { name: 'Hospitality Management', code: 'HOS', also: ['hospitality'] },
+  { name: 'Front Office Operations', code: 'FOO', also: [] },
+  { name: 'Food Production', code: 'FPR', also: [] },
+  { name: 'Food Nutrition and Dietetics', code: 'FND', also: ['food and nutrition', 'nutrition'] },
+  { name: 'Cookery', code: 'COO', also: [] },
+  { name: 'Home Science', code: 'HSC', also: [] },
+  { name: 'Beauty and Wellness', code: 'BWL', also: [] },
+  { name: 'Health Care', code: 'HCA', also: ['healthcare'] },
+  { name: 'Medical Diagnostics', code: 'MDG', also: ['medical diagnosis'] },
+  { name: 'Early Childhood Care and Education', code: 'ECC', also: ['early childhood care'] },
+  { name: 'Agriculture', code: 'AGR', also: [] },
+  { name: 'Horticulture', code: 'HOR', also: [] },
+  { name: 'Apparel', code: 'APP', also: [] },
+  { name: 'Textile Design', code: 'TXD', also: [] },
+  { name: 'Fashion Studies', code: 'FAS', also: ['fashion designing', 'fashion design'] },
+  { name: 'Design', code: 'DES', also: [] },
+  { name: 'Design Thinking and Innovation', code: 'DTI', also: [] },
+  { name: 'Multimedia', code: 'MMD', also: ['multi media', 'multi-media'] },
+  { name: 'Mass Media Studies', code: 'MMS', also: ['mass media', 'mass media and communication', 'mass communication', 'media studies'] },
+  { name: 'Library and Information Science', code: 'LIS', also: [] },
+  { name: 'Typography and Computer Application', code: 'TCA', also: [] },
+  { name: 'Geospatial Technology', code: 'GST', also: [] },
+  { name: 'Electrical Technology', code: 'ETE', also: [] },
+  { name: 'Electronic Technology', code: 'ETN', also: [] },
+  { name: 'Electronics and Hardware', code: 'ELH', also: [] },
+  { name: 'Automotive', code: 'AUT', also: [] },
+  { name: 'Air Conditioning and Refrigeration', code: 'ACR', also: [] },
+  { name: 'Security', code: 'SEC', also: [] },
+  { name: 'Physical Activity Trainer', code: 'PAT', also: [] },
+  { name: 'Foundation Skills for Sciences', code: 'FSS', also: [] },
+  { name: 'Multi Skill Foundation Course', code: 'MSF', also: [] },
+  { name: 'Vocational Education', code: 'VOC', also: ['kaushal bodh', 'skill education'] },
+  { name: 'Art', code: 'ART', also: ['arts', 'art and design', 'visual arts', 'fine arts', 'drawing', 'art education', 'arts education', 'kriti'] },
+  { name: 'Painting', code: 'PNT', also: [] },
+  { name: 'Graphics', code: 'GRA', also: [] },
+  { name: 'Sculpture', code: 'SCU', also: [] },
+  { name: 'Applied Art', code: 'AAR', also: ['commercial art', 'applied commercial art'] },
+  { name: 'Music', code: 'MUS', also: ['western music', 'indian music'] },
+  { name: 'Hindustani Music', code: 'HMU', also: ['hindustani music vocal', 'hindustani music melodic instruments', 'hindustani music percussion instruments'] },
+  { name: 'Carnatic Music', code: 'CMU', also: ['carnatic music vocal', 'carnatic music melodic instruments', 'carnatic music percussion instruments'] },
+  { name: 'Dance', code: 'DAN', also: ['kathak', 'bharatanatyam', 'bharatnatyam', 'kuchipudi', 'odissi', 'kathakali', 'manipuri dance', 'mohiniyattam'] },
+  { name: 'Drama', code: 'DRA', also: ['theatre', 'theater', 'theatre arts'] },
+  { name: 'Performing Arts', code: 'PFA', also: [] },
+  { name: 'Film', code: 'FLM', also: ['film studies'] },
+  { name: 'Physical Education', code: 'PED', also: ['pe', 'health and physical education', 'physical and health education', 'sports', 'physical education and wellbeing', 'physical education and well-being', 'khel yatra', 'sports exercise and health science'] },
+  { name: 'Yoga', code: 'YOG', also: [] },
+  { name: 'National Cadet Corps', code: 'NCC', also: ['ncc'] },
+  { name: 'English', code: 'ENG', also: ['eng', 'english core', 'english communicative', 'english language and literature', 'english first language', 'english as a second language', 'english second language', 'अंग्रेजी'] },
+  { name: 'English Language', code: 'ENL', also: [] },
+  { name: 'English Literature', code: 'ELT', also: ['literature in english', 'english lit'] },
+  { name: 'Elective English', code: 'ELE', also: ['english elective'] },
+  { name: 'Hindi', code: 'HIN', also: ['hindi core', 'hindi course a', 'hindi course b', 'hindi a', 'hindi b', 'हिंदी', 'हिन्दी'] },
+  { name: 'Hindi Elective', code: 'HIE', also: ['elective hindi'] },
+  { name: 'Sanskrit', code: 'SAN', also: ['sanskrit core', 'sanskrit elective', 'संस्कृत'] },
+  { name: 'Urdu', code: 'URD', also: ['urdu core', 'urdu elective', 'urdu course a', 'urdu course b'] },
+  { name: 'Punjabi', code: 'PUN', also: ['punjabi elective'] },
+  { name: 'Bengali', code: 'BEN', also: ['bangla'] },
   { name: 'Tamil', code: 'TAM', also: [] },
-  { name: 'Telugu', code: 'TEL', also: [] },
+  { name: 'Telugu', code: 'TEL', also: ['telugu telangana', 'telugu andhra pradesh'] },
   { name: 'Kannada', code: 'KAN', also: [] },
   { name: 'Malayalam', code: 'MAL', also: [] },
+  { name: 'Marathi', code: 'MAR', also: [] },
   { name: 'Gujarati', code: 'GUJ', also: [] },
-  { name: 'Punjabi', code: 'PUN', also: [] },
-  { name: 'Urdu', code: 'URD', also: [] },
+  { name: 'Odia', code: 'ORI', also: ['oriya'] },
+  { name: 'Assamese', code: 'ASM', also: [] },
+  { name: 'Manipuri', code: 'MNI', also: ['meitei', 'meiteilon'] },
+  { name: 'Sindhi', code: 'SND', also: [] },
+  { name: 'Kashmiri', code: 'KAS', also: [] },
+  { name: 'Konkani', code: 'KOK', also: [] },
+  { name: 'Nepali', code: 'NEP', also: [] },
+  { name: 'Bodo', code: 'BOD', also: [] },
+  { name: 'Dogri', code: 'DOI', also: [] },
+  { name: 'Maithili', code: 'MAI', also: [] },
+  { name: 'Santali', code: 'SAT', also: [] },
+  { name: 'Mizo', code: 'MIZ', also: [] },
+  { name: 'Khasi', code: 'KHA', also: [] },
+  { name: 'Garo', code: 'GAR', also: [] },
+  { name: 'Kokborok', code: 'KBK', also: [] },
+  { name: 'Tangkhul', code: 'TNG', also: [] },
+  { name: 'Lepcha', code: 'LEP', also: [] },
+  { name: 'Limboo', code: 'LIM', also: ['limbu'] },
+  { name: 'Bhutia', code: 'BHU', also: ['bhoti'] },
+  { name: 'Tibetan', code: 'TIB', also: ['tibetian'] },
+  { name: 'Rai', code: 'RAI', also: [] },
+  { name: 'Gurung', code: 'GRG', also: [] },
+  { name: 'Tamang', code: 'TMG', also: [] },
+  { name: 'Sherpa', code: 'SHP', also: [] },
+  { name: 'Thai', code: 'THA', also: [] },
+  { name: 'Arabic', code: 'ARA', also: [] },
+  { name: 'Persian', code: 'PER', also: ['farsi'] },
+  { name: 'French', code: 'FRE', also: [] },
+  { name: 'German', code: 'GER', also: [] },
+  { name: 'Spanish', code: 'SPA', also: [] },
+  { name: 'Russian', code: 'RUS', also: [] },
+  { name: 'Japanese', code: 'JPN', also: [] },
+  { name: 'Chinese', code: 'CHI', also: ['mandarin', 'chinese mandarin'] },
+  { name: 'Korean', code: 'KOR', also: [] },
+  { name: 'Italian', code: 'ITA', also: [] },
+  { name: 'Portuguese', code: 'POR', also: [] },
+  { name: 'Latin', code: 'LAT', also: [] },
+  { name: 'Dzongkha', code: 'DZO', also: [] },
 ];
-const KNOWN_CODES = new Set(SUBJECTS.map((s) => s.code));
+const SUBJECT_NAMES = SUBJECTS.flatMap((x) => [key(x.name), ...x.also].map((a) => ({ a, name: x.name })));
 
+/** The subject named in a box or a line, or an error: only subjects on the list above can be used. */
 export function checkSubject(raw: string): { name: string; code: string | null; problem?: Problem } {
   const k = key(raw);
   if (!k) return { name: '', code: null };
-  const known = SUBJECTS.find((s) => k === key(s.name) || s.also.includes(k));
+  const known = SUBJECTS.find((x) => k === key(x.name) || x.also.includes(k));
   if (known) return { name: known.name, code: known.code };
-  const name = titleCase(tidy(raw));
-  if (name.length > 60) return { name, code: null, problem: { level: 'error', text: 'Subject is longer than 60 characters.' } };
-  const near = k.length >= 4 && SUBJECTS.find((s) => [key(s.name), ...s.also].some((n) => n.length >= 4 && distance(k, n) <= (n.length >= 8 ? 2 : 1)));
-  if (near) return { name, code: madeCode(name, 3), problem: { level: 'warn', text: `Did you mean ${near.name}?` } };
-  let code = madeCode(name, 3);
-  if (!code) return { name, code, problem: { level: 'warn', text: 'Write the subject in English letters, so it can go in the chapter ID.' } };
-  if (KNOWN_CODES.has(code)) code = code.slice(0, 2) + 'X';
-  return { name, code, problem: { level: 'warn', text: `Not a subject this site knows, so its code ${code} was made from the name. Use the same spelling every time.` } };
+  const name = tidy(raw);
+  const near = k.length >= 4 ? closest(k, SUBJECT_NAMES.filter(({ a }) => a.length >= 4)) : undefined;
+  if (near) return { name, code: null, problem: { level: 'error', text: `Did you mean ${near}?` } };
+  return { name, code: null, problem: { level: 'error', text: `"${name}" isn't a subject on this site's list. Write the textbook's subject, such as Science or Mathematics. The guide lists them all.` } };
 }
 
 // ---------------------------------------------------------------- chapter and topic
@@ -237,6 +417,7 @@ export function checkNumbered(value: string, kind: 'chapter' | 'topic'): { no: n
   const problem: Problem | undefined = no !== null && !inRange ? { level: 'error', text: `${Kind} number must be from 1 to ${MAX_NO}.` }
     : name.length > MAX_NAME ? { level: 'error', text: `${Kind} name is longer than ${MAX_NAME} characters.` }
     : kind === 'chapter' && no === null ? { level: 'warn', text: 'Add the chapter number, for example "3: Acids". It is part of the chapter ID.' }
+    : !name && kind === 'chapter' ? { level: 'warn', text: 'Add the chapter name, for example "3: Acids". Questions can\'t be sent without it.' }
     : !name ? { level: 'warn', text: `Add the ${kind} name.` }
     : undefined;
   return { no: inRange ? no : null, name: titleCase(name), problem };

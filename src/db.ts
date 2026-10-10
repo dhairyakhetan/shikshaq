@@ -118,16 +118,21 @@ const supabase = new PostgrestClient(`${PROJECT}/rest/v1`, {
   },
 });
 
+const OFFLINE = "Couldn't reach the question bank. Check the internet connection and try again.";
+/** The database's own words for a value it won't store ("violates check constraint ..."): something is missing or too long. */
+const REFUSED = /violates|constraint|invalid input|value too long|out of range/i;
+
 /** Runs a database call and turns its error into a plain sentence. */
 async function ask<T>(call: PromiseLike<{ data: T | null; error: { message: string } | null }>): Promise<T> {
   let r: { data: T | null; error: { message: string } | null };
   try {
     r = await call;
   } catch {
-    throw new Error("Couldn't reach the question bank. Check the internet connection and try again.");
+    throw new Error(OFFLINE);
   }
-  if (r.error) throw new Error(/fetch/i.test(r.error.message) ? "Couldn't reach the question bank. Check the internet connection and try again." : r.error.message);
-  return r.data as T;
+  if (!r.error) return r.data as T;
+  const m = r.error.message;
+  throw new Error(/fetch/i.test(m) ? OFFLINE : REFUSED.test(m) ? 'The question bank refused this: something in it is missing or too long. Check the lines and boxes marked in red or amber, then try again.' : m);
 }
 
 /** A row from the questions or question_bank table, with the batch's teacher and date where there is one. */
@@ -160,16 +165,27 @@ export async function loadQuestionBank(): Promise<BankQuestion[]> {
 /** The number in the header: questions waiting for the HoD. HoDs and the admin only. */
 export const waitingCount = () => ask<number>(supabase.rpc('waiting_count'));
 
+/** The most questions the database takes in one batch; more are sent as several batches, one after another. */
+export const BATCH_MAX = 500;
+
 /**
- * The formatter sends the signed-in person's questions to wait for the HoD, as one batch. Questions with no chapter ID
- * can't be linked to a chapter, so they aren't sent; the database skips any already waiting or approved in the same
- * chapter, and any that were sent back to this person and haven't changed (`sentBackIds`: the notifications to show),
- * and gives each new question its ID.
+ * The formatter sends the signed-in person's questions to wait for the HoD, as one batch (or a batch per 500).
+ * Questions with no chapter ID or chapter name can't be linked to a chapter, so they aren't sent; the database skips any
+ * already waiting or approved in the same chapter, and any that were sent back to this person and haven't changed
+ * (`sentBackIds`: the notifications to show), and gives each new question its ID.
  */
 export async function sendBatch(rows: Row[]) {
-  const ready = rows.filter((r) => r.chapter_id).map(toRecord);
-  const r = await ask<{ batch_id: string | null; sent: number; already: number; sent_back: number; sent_back_ids: string[] }>(supabase.rpc('submit_batch', { questions: ready }));
-  return { batchId: r.batch_id, sent: r.sent, already: r.already, sentBack: r.sent_back, sentBackIds: r.sent_back_ids };
+  const ready = rows.filter((r) => r.chapter_id && r.chapter).map(toRecord);
+  const out = { batchIds: [] as string[], sent: 0, already: 0, sentBack: 0, sentBackIds: [] as string[] };
+  for (let i = 0; i < ready.length; i += BATCH_MAX) {
+    const r = await ask<{ batch_id: string | null; sent: number; already: number; sent_back: number; sent_back_ids: string[] }>(supabase.rpc('submit_batch', { questions: ready.slice(i, i + BATCH_MAX) }));
+    if (r.batch_id) out.batchIds.push(r.batch_id);
+    out.sent += r.sent;
+    out.already += r.already;
+    out.sentBack += r.sent_back;
+    out.sentBackIds.push(...r.sent_back_ids);
+  }
+  return out;
 }
 
 /** Questions from the HoD desk's functions, with their batches. */
@@ -204,8 +220,8 @@ export interface SentBack extends BankQuestion { reviewer: string; seen: boolean
 /** The signed-in person's questions that were sent back, newest first. */
 export const mySentBack = async () => (await ask<(DbQuestion & { reviewer: string; seen: boolean; now: SentBack['now'] })[]>(supabase.rpc('my_sent_back')))
   .map((r): SentBack => ({ ...fromDb(r), reviewer: r.reviewer, seen: r.seen, now: r.now }));
-/** The person has seen their notifications. */
-export const markSentBackSeen = () => ask<null>(supabase.rpc('mark_sent_back_seen'));
+/** The person has seen these notifications (the ones the bell showed them). */
+export const markSentBackSeen = (ids: string[]) => ask<null>(supabase.rpc('mark_sent_back_seen', { ids }));
 
 /**
  * What the signed-in person may do: member (format and send questions, and see which were sent back), hod (also the HoD

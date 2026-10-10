@@ -240,42 +240,95 @@ create policy "Anyone can read the question bank" on public.question_bank for se
 
 -- ---------------------------------------------------------------- what the website calls
 
--- The board and subject codes the site uses (src/details.ts; tests/formatter.test.ts checks that this list agrees). A
--- chapter ID must use the code of a known board or subject, and a made-up subject code can't be a known one, so a
--- question can't be filed under another subject's chapters.
-create function private.codes_match(board text, subject text, chapter_id text) returns boolean language sql immutable set search_path = ''
+-- The boards and subjects the site knows (src/details.ts; tests/formatter.test.ts checks that these lists agree with
+-- it). A question can only be sent with a board and a subject from these lists, and its chapter ID must use their codes,
+-- so a question can't be filed under another board's or subject's chapters.
+create table private.boards (name text primary key, code text not null unique check (code ~ '^[A-Z]{2,5}$'));
+create table private.subjects (name text primary key, code text not null unique check (code ~ '^[A-Z]{3}$'));
+insert into private.boards (name, code) values
+  ('CBSE', 'CBSE'), ('ICSE', 'ICSE'), ('ISC', 'ISC'), ('NIOS', 'NIOS'), ('IB', 'IB'), ('IGCSE', 'IGCSE'),
+  ('Cambridge', 'CAIE'), ('Edexcel', 'EDEX'), ('Aligarh Muslim University Board', 'AMU'),
+  ('Jamia Millia Islamia', 'JMI'), ('Banasthali Vidyapith', 'BANV'), ('Dayalbagh Educational Institute', 'DEI'),
+  ('Maharishi Patanjali Sanskrit Sansthan', 'MPSS'), ('Andhra Pradesh State Board', 'AP'),
+  ('Assam State Board', 'AS'), ('Bihar State Board', 'BR'), ('Chhattisgarh State Board', 'CG'),
+  ('Delhi State Board', 'DL'), ('Goa State Board', 'GA'), ('Gujarat State Board', 'GJ'),
+  ('Haryana State Board', 'HR'), ('Himachal Pradesh State Board', 'HP'), ('Jammu and Kashmir State Board', 'JK'),
+  ('Jharkhand State Board', 'JH'), ('Karnataka State Board', 'KA'), ('Kerala State Board', 'KL'),
+  ('Madhya Pradesh State Board', 'MP'), ('Maharashtra State Board', 'MH'), ('Manipur State Board', 'MN'),
+  ('Meghalaya State Board', 'ML'), ('Mizoram State Board', 'MZ'), ('Nagaland State Board', 'NL'),
+  ('Odisha State Board', 'OD'), ('Punjab State Board', 'PB'), ('Rajasthan State Board', 'RJ'),
+  ('Tamil Nadu State Board', 'TN'), ('Telangana State Board', 'TS'), ('Tripura State Board', 'TR'),
+  ('Uttar Pradesh State Board', 'UP'), ('Uttarakhand State Board', 'UK'), ('West Bengal State Board', 'WB'),
+  ('Andhra Pradesh Open School Society', 'APOSS'), ('Bihar Board of Open Schooling and Examination', 'BBOSE'),
+  ('Chhattisgarh State Open School', 'CGSOS'), ('Madhya Pradesh State Open School', 'MPSOS'),
+  ('Rajasthan State Open School', 'RSOS'), ('Telangana Open School Society', 'TOSS'),
+  ('Bihar State Madrasa Education Board', 'BSMEB'), ('Chhattisgarh Madrasa Board', 'CGMB'),
+  ('Uttar Pradesh Board of Madrasa Education', 'UPBME'), ('Uttarakhand Madrasa Education Board', 'UKMEB'),
+  ('West Bengal Board of Madrasah Education', 'WBBME'), ('Bihar Sanskrit Shiksha Board', 'BSSB'),
+  ('Chhattisgarh Sanskrit Board', 'CGSB'), ('Uttar Pradesh Madhyamik Sanskrit Shiksha Parishad', 'UPSSP'),
+  ('Uttarakhand Sanskrit Shiksha Parishad', 'USSP')
+on conflict (name) do update set code = excluded.code;
+insert into private.subjects (name, code) values
+  ('Physics', 'PHY'), ('Chemistry', 'CHE'), ('Biology', 'BIO'), ('Mathematics', 'MAT'),
+  ('Applied Mathematics', 'AMA'), ('Additional Mathematics', 'ADM'), ('Further Mathematics', 'FMA'),
+  ('Statistics', 'STA'), ('Science', 'SCI'), ('Environmental Studies', 'EVS'), ('Environmental Science', 'ENV'),
+  ('Environmental Management', 'EMG'), ('Biotechnology', 'BTE'), ('Computer Science', 'CSC'),
+  ('Computer Applications', 'CAP'), ('Informatics Practices', 'INP'), ('Information Technology', 'ITE'),
+  ('Artificial Intelligence', 'AIN'), ('Data Science', 'DSC'), ('Robotics', 'ROB'), ('Web Applications', 'WEB'),
+  ('Data Entry Operations', 'DEO'), ('Engineering Graphics', 'EGR'), ('Engineering Science', 'ESC'),
+  ('Electricity and Electronics', 'EEL'), ('Technical Drawing', 'TDR'),
+  ('Geometrical and Mechanical Drawing', 'GMD'), ('Geometrical and Building Drawing', 'GBD'),
+  ('Design and Technology', 'DTE'), ('Social Science', 'SST'), ('History', 'HIS'), ('Geography', 'GEO'),
+  ('Civics', 'CIV'), ('History and Civics', 'HCV'), ('Political Science', 'POL'), ('Economics', 'ECO'),
+  ('Sociology', 'SOC'), ('Psychology', 'PSY'), ('Philosophy', 'PHI'), ('Anthropology', 'ANT'),
+  ('Religious Studies', 'REL'), ('Global Perspectives', 'GLP'), ('Theory of Knowledge', 'TOK'),
+  ('Legal Studies', 'LGS'), ('Knowledge Traditions and Practices of India', 'KTP'),
+  ('Indian Culture and Heritage', 'ICH'), ('General Knowledge', 'GKN'), ('Moral Science', 'MSC'),
+  ('Accountancy', 'ACC'), ('Business Studies', 'BST'), ('Commerce', 'CMR'), ('Commercial Studies', 'COM'),
+  ('Commercial Applications', 'CMA'), ('Economic Applications', 'ECA'), ('Entrepreneurship', 'ENT'),
+  ('Business Administration', 'BAD'), ('Taxation', 'TAX'), ('Cost Accounting', 'CAC'), ('Financial Markets', 'FIN'),
+  ('Banking', 'BNK'), ('Insurance', 'INS'), ('Marketing', 'MKT'), ('Salesmanship', 'SLS'),
+  ('Office Procedures and Practices', 'OPP'), ('Shorthand', 'SHO'), ('Retail', 'RET'), ('Tourism', 'TOU'),
+  ('Hospitality Management', 'HOS'), ('Front Office Operations', 'FOO'), ('Food Production', 'FPR'),
+  ('Food Nutrition and Dietetics', 'FND'), ('Cookery', 'COO'), ('Home Science', 'HSC'),
+  ('Beauty and Wellness', 'BWL'), ('Health Care', 'HCA'), ('Medical Diagnostics', 'MDG'),
+  ('Early Childhood Care and Education', 'ECC'), ('Agriculture', 'AGR'), ('Horticulture', 'HOR'), ('Apparel', 'APP'),
+  ('Textile Design', 'TXD'), ('Fashion Studies', 'FAS'), ('Design', 'DES'),
+  ('Design Thinking and Innovation', 'DTI'), ('Multimedia', 'MMD'), ('Mass Media Studies', 'MMS'),
+  ('Library and Information Science', 'LIS'), ('Typography and Computer Application', 'TCA'),
+  ('Geospatial Technology', 'GST'), ('Electrical Technology', 'ETE'), ('Electronic Technology', 'ETN'),
+  ('Electronics and Hardware', 'ELH'), ('Automotive', 'AUT'), ('Air Conditioning and Refrigeration', 'ACR'),
+  ('Security', 'SEC'), ('Physical Activity Trainer', 'PAT'), ('Foundation Skills for Sciences', 'FSS'),
+  ('Multi Skill Foundation Course', 'MSF'), ('Vocational Education', 'VOC'), ('Art', 'ART'), ('Painting', 'PNT'),
+  ('Graphics', 'GRA'), ('Sculpture', 'SCU'), ('Applied Art', 'AAR'), ('Music', 'MUS'), ('Hindustani Music', 'HMU'),
+  ('Carnatic Music', 'CMU'), ('Dance', 'DAN'), ('Drama', 'DRA'), ('Performing Arts', 'PFA'), ('Film', 'FLM'),
+  ('Physical Education', 'PED'), ('Yoga', 'YOG'), ('National Cadet Corps', 'NCC'), ('English', 'ENG'),
+  ('English Language', 'ENL'), ('English Literature', 'ELT'), ('Elective English', 'ELE'), ('Hindi', 'HIN'),
+  ('Hindi Elective', 'HIE'), ('Sanskrit', 'SAN'), ('Urdu', 'URD'), ('Punjabi', 'PUN'), ('Bengali', 'BEN'),
+  ('Tamil', 'TAM'), ('Telugu', 'TEL'), ('Kannada', 'KAN'), ('Malayalam', 'MAL'), ('Marathi', 'MAR'),
+  ('Gujarati', 'GUJ'), ('Odia', 'ORI'), ('Assamese', 'ASM'), ('Manipuri', 'MNI'), ('Sindhi', 'SND'),
+  ('Kashmiri', 'KAS'), ('Konkani', 'KOK'), ('Nepali', 'NEP'), ('Bodo', 'BOD'), ('Dogri', 'DOI'), ('Maithili', 'MAI'),
+  ('Santali', 'SAT'), ('Mizo', 'MIZ'), ('Khasi', 'KHA'), ('Garo', 'GAR'), ('Kokborok', 'KBK'), ('Tangkhul', 'TNG'),
+  ('Lepcha', 'LEP'), ('Limboo', 'LIM'), ('Bhutia', 'BHU'), ('Tibetan', 'TIB'), ('Rai', 'RAI'), ('Gurung', 'GRG'),
+  ('Tamang', 'TMG'), ('Sherpa', 'SHP'), ('Thai', 'THA'), ('Arabic', 'ARA'), ('Persian', 'PER'), ('French', 'FRE'),
+  ('German', 'GER'), ('Spanish', 'SPA'), ('Russian', 'RUS'), ('Japanese', 'JPN'), ('Chinese', 'CHI'),
+  ('Korean', 'KOR'), ('Italian', 'ITA'), ('Portuguese', 'POR'), ('Latin', 'LAT'), ('Dzongkha', 'DZO')
+on conflict (name) do update set code = excluded.code;
+
+-- What is wrong with a question's board, subject and chapter ID, in words; null when nothing is.
+create function private.codes_problem(board text, subject text, chapter_id text) returns text language sql stable set search_path = ''
 as $$
-  with boards(name, code) as (values
-    ('CBSE', 'CBSE'), ('ICSE', 'ICSE'), ('ISC', 'ISC'), ('IB', 'IB'), ('IGCSE', 'IGCSE'), ('Cambridge', 'CAIE'),
-    ('NIOS', 'NIOS'), ('Andhra Pradesh State Board', 'AP'), ('Arunachal Pradesh State Board', 'AR'),
-    ('Assam State Board', 'AS'), ('Bihar State Board', 'BR'), ('Chhattisgarh State Board', 'CG'),
-    ('Delhi State Board', 'DL'), ('Goa State Board', 'GA'), ('Gujarat State Board', 'GJ'),
-    ('Haryana State Board', 'HR'), ('Himachal Pradesh State Board', 'HP'), ('Jammu and Kashmir State Board', 'JK'),
-    ('Jharkhand State Board', 'JH'), ('Karnataka State Board', 'KA'), ('Kerala State Board', 'KL'),
-    ('Madhya Pradesh State Board', 'MP'), ('Maharashtra State Board', 'MH'), ('Manipur State Board', 'MN'),
-    ('Meghalaya State Board', 'ML'), ('Mizoram State Board', 'MZ'), ('Nagaland State Board', 'NL'),
-    ('Odisha State Board', 'OD'), ('Punjab State Board', 'PB'), ('Rajasthan State Board', 'RJ'),
-    ('Sikkim State Board', 'SK'), ('Tamil Nadu State Board', 'TN'), ('Telangana State Board', 'TS'),
-    ('Tripura State Board', 'TR'), ('Uttar Pradesh State Board', 'UP'), ('Uttarakhand State Board', 'UK'),
-    ('West Bengal State Board', 'WB')
-  ), subjects(name, code) as (values
-    ('Physics', 'PHY'), ('Chemistry', 'CHE'), ('Biology', 'BIO'), ('Mathematics', 'MAT'), ('Science', 'SCI'),
-    ('Social Science', 'SST'), ('English', 'ENG'), ('English Language', 'ENL'), ('English Literature', 'ELT'),
-    ('Hindi', 'HIN'), ('Sanskrit', 'SAN'), ('History', 'HIS'), ('Geography', 'GEO'), ('Civics', 'CIV'),
-    ('History and Civics', 'HCV'), ('Political Science', 'POL'), ('Economics', 'ECO'), ('Computer Science', 'CSC'),
-    ('Computer Applications', 'CAP'), ('Informatics Practices', 'INP'), ('Accountancy', 'ACC'),
-    ('Business Studies', 'BST'), ('Commercial Studies', 'COM'), ('Environmental Studies', 'EVS'),
-    ('Environmental Science', 'ENV'), ('Statistics', 'STA'), ('Psychology', 'PSY'), ('Sociology', 'SOC'),
-    ('Physical Education', 'PED'), ('Biotechnology', 'BTE'), ('Home Science', 'HSC'), ('Legal Studies', 'LGS'),
-    ('General Knowledge', 'GKN'), ('French', 'FRE'), ('German', 'GER'), ('Marathi', 'MAR'), ('Bengali', 'BEN'),
-    ('Tamil', 'TAM'), ('Telugu', 'TEL'), ('Kannada', 'KAN'), ('Malayalam', 'MAL'), ('Gujarati', 'GUJ'),
-    ('Punjabi', 'PUN'), ('Urdu', 'URD')
-  ), id as (select regexp_match(chapter_id, '^([A-Z]{2,5})[0-9]{2}([A-Z]{3})[0-9]{2}$') m)
-  select id.m is not null
-     and coalesce((select b.code = id.m[1] from boards b where lower(b.name) = lower(board)), true)
-     and coalesce((select s.code = id.m[2] from subjects s where lower(s.name) = lower(subject)),
-                   not exists (select 1 from subjects s where s.code = id.m[2]))
-  from id
+  select case
+    when not exists (select 1 from private.boards b where lower(b.name) = lower(board))
+      then format('The board "%s" isn''t on the site''s list.', board)
+    when not exists (select 1 from private.subjects s where lower(s.name) = lower(subject))
+      then format('The subject "%s" isn''t on the site''s list.', subject)
+    when m is null
+      or (select b.code from private.boards b where lower(b.name) = lower(board)) is distinct from m[1]
+      or (select s.code from private.subjects s where lower(s.name) = lower(subject)) is distinct from m[2]
+      then format('The chapter ID %s doesn''t match the board "%s" and subject "%s".', chapter_id, board, subject)
+  end
+  from (select regexp_match(chapter_id, '^([A-Z]{2,5})[0-9]{2}([A-Z]{3})[0-9]{2}$') m) id
 $$;
 
 -- The formatter sends the signed-in person's questions as one batch. Each needs a chapter ID (the formatter leaves out
@@ -299,6 +352,7 @@ declare
   tno int;
   qtext text;
   nq text;
+  why text;
   n int;
   back text[];
   seen text[] := '{}';
@@ -325,9 +379,8 @@ begin
     tno := (q->>'topic_no')::int;
     nq := private.norm(qtext);
     if cid is null then raise exception 'A question has no chapter ID.'; end if;
-    if not private.codes_match(q->>'board', q->>'subject', cid) then
-      raise exception 'The chapter ID % doesn''t match the board "%" and subject "%". Check their spelling.', cid, q->>'board', q->>'subject';
-    end if;
+    why := private.codes_problem(q->>'board', q->>'subject', cid);
+    if why is not null then raise exception '%', why; end if;
     if cid || '|' || nq = any(seen)
        or exists (select 1 from public.questions x where x.chapter_id = cid and private.norm(x.question) = nq and x.status <> 'rejected') then
       already := already + 1;
@@ -466,20 +519,22 @@ begin
   );
 end $$;
 
--- The person has seen their notifications.
-create function public.mark_sent_back_seen() returns void language plpgsql security definer set search_path = ''
+-- The person has seen these notifications (the ones the bell showed them; all of them when no list is given), so one
+-- sent back while the bell was open still shows as new.
+create function public.mark_sent_back_seen(ids text[] default null) returns void language plpgsql security definer set search_path = ''
 as $$
 begin
   if private.role() is null then raise exception 'Please sign in first.'; end if;
   update public.questions q set seen_at = now()
   from public.batches b
-  where b.batch_id = q.batch_id and b.teacher_email = lower(auth.jwt() ->> 'email') and q.status = 'rejected' and q.seen_at is null;
+  where b.batch_id = q.batch_id and b.teacher_email = lower(auth.jwt() ->> 'email') and q.status = 'rejected' and q.seen_at is null
+    and (ids is null or q.question_id = any(ids));
 end $$;
 
 -- everything needs a sign-in; the HoD desk also needs an HoD or admin, people and roles need the admin (checked inside)
 revoke execute on function public.waiting_count(), public.hod_questions(), public.hod_approved(timestamptz, text, int), public.my_role(),
-  public.submit_batch(jsonb), public.hod_set_status(text[], text, text), public.my_sent_back(), public.mark_sent_back_seen(),
+  public.submit_batch(jsonb), public.hod_set_status(text[], text, text), public.my_sent_back(), public.mark_sent_back_seen(text[]),
   public.admin_people(), public.admin_set_role(text, text), public.admin_remove(text) from public, anon;
 grant execute on function public.waiting_count(), public.hod_questions(), public.hod_approved(timestamptz, text, int), public.my_role(),
-  public.submit_batch(jsonb), public.hod_set_status(text[], text, text), public.my_sent_back(), public.mark_sent_back_seen(),
+  public.submit_batch(jsonb), public.hod_set_status(text[], text, text), public.my_sent_back(), public.mark_sent_back_seen(text[]),
   public.admin_people(), public.admin_set_role(text, text), public.admin_remove(text) to authenticated;

@@ -404,6 +404,10 @@ select { height: 46px; padding: 0 12px; font-size: 16px; font-weight: 500; }
 @media (max-width: 560px) {
   .brand-text { display: none; }
 }
+@media (max-width: 440px) {
+  /* an admin's header has one more link: the guide link moves into the formatter's intro instead */
+  .top.crowded .top-left .top-link { display: none; }
+}
 @media (max-width: 420px) {
   /* the HoD desk's three tabs, and Revise's four games, stay on as few lines as they can */
   .tabs { gap: 5px; }

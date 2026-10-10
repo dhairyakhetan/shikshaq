@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { describe, expect, it } from 'vitest';
-import { BOARDS } from '../src/details';
+import { ALL_BOARDS, SUBJECTS } from '../src/details';
 import { COLUMNS, DIFFICULTIES } from '../src/db';
 import { format, MAX_ANSWER, MAX_QUESTION, missing } from '../src/format';
 import config from '../vite.config';
@@ -24,8 +24,10 @@ describe('the chatbot instructions agree with the code', () => {
     expect(text).toContain(`for example ${rows[0].chapter_id} for CBSE, class 10, Science, chapter 1, and ${rows[0].chapter_id}T02 for its topic 2`);
   });
 
-  it('name every board the site knows', () => {
-    for (const b of BOARDS) expect(text, b.name).toContain(b.name);
+  it('list exactly the boards and subjects the site takes, as the site writes them', () => {
+    const list = (id: string) => html.match(new RegExp(`<p id="${id}">([^<]*)</p>`))![1].split(', ');
+    expect(list('boards')).toEqual(ALL_BOARDS.map((b) => b.name));
+    expect(list('subjects')).toEqual(SUBJECTS.map((x) => x.name));
     expect(text).toContain('Maharashtra State Board');
   });
 
@@ -102,6 +104,15 @@ describe('people see the app, chatbots see the instructions', () => {
     // no hidden attribute or inline style: some fetchers drop elements marked that way
     expect(index).not.toMatch(/id="for-ai"[^>]*(hidden|style)/);
     expect(index).toMatch(/<div id="app"><\/div>/);
+  });
+
+  it('the security policy lets the page\'s one inline script run, and nothing else inline', async () => {
+    const { createHash } = await import('node:crypto');
+    const inline = index.match(/<script>([^<]*)<\/script>/)![1];
+    const csp = (JSON.parse(read('vercel.json')).headers[0].headers as { key: string; value: string }[]).find((h) => h.key === 'Content-Security-Policy')!.value;
+    const scripts = csp.split('; ').find((d) => d.startsWith('script-src '))!;
+    expect(scripts).toBe(`script-src 'self' 'sha256-${createHash('sha256').update(inline).digest('base64')}'`);
+    expect(csp).toContain('connect-src \'self\' https://dfytzracuyiitlqeqszm.supabase.co');
   });
 
   it('the build bakes the instructions into the page', () => {

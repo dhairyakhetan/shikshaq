@@ -44,10 +44,14 @@ and nothing has to be looked up:
 | `chapter_id` | `CBSE11CHE01` | board code + class (2 digits) + subject code (3 letters) + chapter number (2 digits) |
 | `topic_id` | `CBSE11CHE01T03` | chapter ID + `T` + topic number (2 digits) |
 
-IDs sort by board, class, subject, chapter, topic. Board codes: CBSE, ICSE, ISC, IB, IGCSE, CAIE (Cambridge), NIOS, and two-letter
-state codes (MH, TN, UP, ...). 44 subjects have fixed codes (PHY, CHE, MAT, SCI, ...); any other subject gets one made from its name
-(never one of the fixed codes) and a warning. A question gets no ID until board, class, subject and chapter number are all known.
-The lists live in `src/details.ts`.
+IDs sort by board, class, subject, chapter, topic. The site takes only boards and subjects on its lists, built from COBSE's list of
+recognised boards and the subjects of CBSE, CISCE, NIOS, the state boards, Cambridge, Edexcel and IB: 56 boards (CBSE, ICSE, ISC,
+NIOS, IB, IGCSE, CAIE for Cambridge, EDEX for Edexcel, each state's board by its two-letter code such as MH, TN and UP, and the
+recognised open school, madrasa, Sanskrit and university boards) and 168 subjects, each with a fixed three-letter code (PHY, CHE,
+MAT, SCI, ...; languages mostly use their ISO 639 codes). Anything else is an error, with a "Did you mean ...?" for a likely typo,
+and the database refuses it too. A question gets no ID until board, class, subject and chapter number are all known. The lists live
+in `src/details.ts`, and the same lists are in the database (`private.boards`, `private.subjects`) and in the chatbot instructions;
+the tests fail if any of them disagree.
 
 ## The page
 

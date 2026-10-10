@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  BOARDS, chapterId, checkBoard, checkClass, checkDetail, checkSubject, detailsId, parseNumbered, readDetails, readMeta, standardDetail,
-  STATES, SUBJECTS, titleCase, writeDetail,
+  ALL_BOARDS, chapterId, checkBoard, checkClass, checkDetail, checkSubject, detailsId, parseNumbered, readDetails, readMeta, standardDetail,
+  SUBJECTS, titleCase, writeDetail,
 } from '../src/details';
 import {
   asText, baseName, EXAMPLE, format, lineLevels, MAX_ANSWER, MAX_QUESTION, missing, NO_ANSWER, visibleIssues,
@@ -100,7 +100,7 @@ describe('reading questions and answers', () => {
 
   it('marks each line with its worst problem, for the underline', () => {
     const { issues } = format('Board: Xyz\nClass: 13\nq1 | a1\nwhat?');
-    expect([...lineLevels(issues)]).toEqual([[1, 'warn'], [2, 'error'], [4, 'error']]);
+    expect([...lineLevels(issues)]).toEqual([[1, 'error'], [2, 'error'], [4, 'error']]);
   });
 });
 
@@ -156,14 +156,14 @@ describe('details: board, class, subject, chapter, topic, difficulty', () => {
     expect(issues).toEqual([{ line: 5, level: 'warn', text: '"tricky" is not easy, medium or hard, so no difficulty was set.' }]);
   });
 
-  it('flags a wrong class as an error and an unknown board or subject as a warning', () => {
+  it('flags a wrong class, board or subject as an error, and its questions get no chapter ID', () => {
     const { rows, issues } = format('Board: cbsc\nClass: 13\nSubject: chemsitry\nChapter 1: x\nq1 | a1');
     expect(issues.map((x) => [x.line, x.level, x.text])).toEqual([
-      [1, 'warn', 'Did you mean CBSE?'],
+      [1, 'error', 'Did you mean CBSE?'],
       [2, 'error', 'Class must be from 1 to 12.'],
-      [3, 'warn', 'Did you mean Chemistry?'],
+      [3, 'error', 'Did you mean Chemistry?'],
     ]);
-    expect(rows[0].class).toBeNull();
+    expect(rows[0]).toMatchObject({ class: null, chapter_id: null });
   });
 
   it('warns about ICSE in class 11, two names for one chapter number, unused details and empty topics', () => {
@@ -194,8 +194,8 @@ describe('details: board, class, subject, chapter, topic, difficulty', () => {
     expect(rows.map((r) => [r.chapter_id, r.topic_id, r.chapter, r.topic, r.question_no, r.answer, r.difficulty])).toEqual([
       ['CBSE10CHE03', 'CBSE10CHE03T01', 'Acids', 'Indicators', 1, 'Red', 'easy'],
       ['CBSE10CHE03', 'CBSE10CHE03T01', 'Acids', 'Indicators', 2, 'Blue', null],
-      ['XYZ10CHE03', null, 'Acids', '', 1, 'C', null],
-      ['XYZ10CHE03', null, 'Acids', '', 2, 'D', null],
+      [null, null, 'Acids', '', 1, 'C', null], // xyz isn't a board on the list
+      [null, null, 'Acids', '', 2, 'D', null],
     ]);
     expect(issues.map((x) => x.line)).toEqual([4]);
     const csv = 'question,answer,topic\n"Capital of France, the country",Paris,Europe\n"He said ""hi""",Hi,Words';
@@ -317,18 +317,34 @@ describe('boards', () => {
     expect(checkBoard('samacheer kalvi').code).toBe('TN');
   });
 
-  it('warns about typos, unknown boards and a bare "state board"', () => {
-    expect(checkBoard('cbsc').problem).toEqual({ level: 'warn', text: 'Did you mean CBSE?' });
-    expect(checkBoard('State board').problem?.text).toBe('Which state? For example: Maharashtra State Board.');
-    const odd = checkBoard('Xavier Board of Studies');
-    expect(odd.code).toBe('XS');
-    expect(odd.problem?.level).toBe('warn');
+  it('knows a state\'s board written its own way, and its open school, madrasa and Sanskrit boards', () => {
+    for (const b of ['Bihar School Examination Board', 'UP Board of High School & Intermediate Education', 'Kerala Board of Public Examination', 'Karnataka Pre-University Board', 'Kerala syllabus']) {
+      expect(checkBoard(b).problem, b).toBeUndefined();
+    }
+    expect(checkBoard('Bihar madrasa board')).toEqual({ name: 'Bihar State Madrasa Education Board', code: 'BSMEB' });
+    expect(checkBoard('UP Sanskrit board').code).toBe('UPSSP');
+    expect(checkBoard('MP open school').code).toBe('MPSOS');
+    expect(checkBoard('Edexcel IGCSE')).toEqual({ name: 'Edexcel', code: 'EDEX' });
+  });
+
+  it('refuses anything not on the list, with a message: typos, schools, made-up boards, a bare "state board"', () => {
+    expect(checkBoard('cbsc').problem).toEqual({ level: 'error', text: 'Did you mean CBSE?' });
+    expect(checkBoard('maharastra').problem?.text).toBe('Did you mean Maharashtra State Board?');
+    expect(checkBoard('State board').problem).toEqual({ level: 'error', text: 'Which state? For example: Maharashtra State Board.' });
+    expect(checkBoard('Sikkim').problem?.text).toBe('Sikkim has no school board of its own. Write the board the school follows, such as CBSE.');
+    for (const b of ['Delhi Public School', 'Assam Rifles Public School', 'Indian Baccalaureate', 'Kendriya Vidyalaya', 'Xavier Board of Studies']) {
+      expect(checkBoard(b), b).toMatchObject({ code: null, problem: { level: 'error', text: `"${b}" isn't a board on this site's list. Write the board the textbook is for, such as CBSE, ICSE or Maharashtra State Board. The guide lists them all.` } });
+    }
     expect(checkBoard('').problem).toBeUndefined();
   });
 
-  it('has unique codes', () => {
-    const codes = [...BOARDS, ...STATES].map((b) => b.code);
+  it('has unique codes and names', () => {
+    const codes = ALL_BOARDS.map((b) => b.code);
     expect(new Set(codes).size).toBe(codes.length);
+    expect(codes.every((c) => /^[A-Z]{2,5}$/.test(c))).toBe(true);
+    const names = ALL_BOARDS.flatMap((b) => [b.name.toLowerCase(), ...b.also]);
+    expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual([]);
+    for (const b of ALL_BOARDS) expect(checkBoard(b.name), b.name).toEqual({ name: b.name, code: b.code });
   });
 });
 
@@ -353,12 +369,17 @@ describe('subjects', () => {
     expect(codes.every((c) => /^[A-Z]{3}$/.test(c))).toBe(true);
   });
 
-  it('suggests the subject for a typo, and makes a code for an unknown one without clashing', () => {
-    expect(checkSubject('Phisics').problem?.text).toBe('Did you mean Physics?');
-    expect(checkSubject('Astronomy')).toMatchObject({ name: 'Astronomy', code: 'AST' });
-    expect(checkSubject('physical geography')).toMatchObject({ name: 'Physical Geography', code: 'PHG' });
-    expect(checkSubject('Biochemistry').code).toBe('BIX'); // BIO is Biology's
-    expect(checkSubject('विज्ञान').code).toBeNull();
+  it('refuses a subject not on the list, suggesting the one meant', () => {
+    expect(checkSubject('Phisics').problem).toEqual({ level: 'error', text: 'Did you mean Physics?' });
+    expect(checkSubject('Artificial Inteligence').problem?.text).toBe('Did you mean Artificial Intelligence?');
+    for (const x of ['Astronomy', 'Biochemistry', 'Science (Physics)']) {
+      expect(checkSubject(x), x).toMatchObject({ code: null, problem: { level: 'error', text: `"${x}" isn't a subject on this site's list. Write the textbook's subject, such as Science or Mathematics. The guide lists them all.` } });
+    }
+    expect(checkSubject('हिंदी')).toEqual({ name: 'Hindi', code: 'HIN' });
+    expect(checkSubject('Hindi Course B').code).toBe('HIN');
+    expect(checkSubject('Kathak').code).toBe('DAN');
+    const names = SUBJECTS.flatMap((x) => [x.name.toLowerCase(), ...x.also]);
+    expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual([]);
   });
 });
 
@@ -462,10 +483,10 @@ describe('the database knows the same codes (supabase/schema.sql)', () => {
   it('lists every board and subject with the code the site gives it', () => {
     const sql = readFileSync('supabase/schema.sql', 'utf8');
     const list = (name: string) => {
-      const m = sql.match(new RegExp(`${name}\\(name, code\\) as \\(values([\\s\\S]*?)\\n  \\)`));
+      const m = sql.match(new RegExp(`insert into private\\.${name} \\(name, code\\) values([\\s\\S]*?)\\non conflict`));
       return [...(m?.[1] ?? '').matchAll(/\('((?:[^']|'')+)', '([A-Z]+)'\)/g)].map((x) => `${x[1].replace(/''/g, "'")}=${x[2]}`);
     };
-    expect(list('boards')).toEqual([...BOARDS.map((b) => `${b.name}=${b.code}`), ...STATES.map((s) => `${s.name} State Board=${s.code}`)]);
+    expect(list('boards')).toEqual(ALL_BOARDS.map((b) => `${b.name}=${b.code}`));
     expect(list('subjects')).toEqual(SUBJECTS.map((s) => `${s.name}=${s.code}`));
   });
 });

@@ -13,9 +13,8 @@ import { ActionIcon, ArrowDownIcon, CopyIcon, download, DownloadIcon, Link, Rows
 const HINT: Record<DetailKey, string> = { board: 'CBSE', class: '10', subject: 'Science', chapter: '1: Chemical Reactions' };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-/** The example's questions: they are only for trying the page, so they are never sent. */
+/** The example's questions: they are only for trying the page, so they are never sent while the example is loaded. */
 const EXAMPLE_QUESTIONS = new Set(format(EXAMPLE).rows.map((r) => r.question.toLowerCase()));
-const fromExample = (r: Row) => EXAMPLE_QUESTIONS.has(r.question.toLowerCase());
 const motion = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
 /** Scrolls smoothly to a part of the page and moves keyboard focus there, without adding "#..." to the address. */
@@ -28,10 +27,12 @@ function scrollToEl(el: HTMLElement | null) {
 /**
  * `teacher` is the signed-in person's name; `reviewer` is an HoD or the admin, who can open the HoD desk; `onSent` tells
  * the header to count the waiting questions again; `onSentBack` opens the notifications at questions that were sent back
- * to this person before; `draft` is text to put in the Questions box ("Fix in the formatter" on a notification).
+ * to this person before; `draft` is text to put in the Questions box ("Fix in the formatter" on a notification);
+ * `onUnsaved` gets how many questions would be lost (not sent or downloaded), so signing out can warn first.
  */
-export function Formatter({ teacher, reviewer, onSent, onSentBack, draft }: {
+export function Formatter({ teacher, reviewer, onSent, onSentBack, draft, onUnsaved }: {
   teacher: string; reviewer: boolean; onSent: () => void; onSentBack: (ids: string[]) => void; draft: { text: string; n: number } | null;
+  onUnsaved: (n: number) => void;
 }) {
   const [raw, setRaw] = useState('');
   /** The text as it was last sent or downloaded: leaving the page with anything else asks first, as it isn't saved. */
@@ -105,35 +106,50 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack, draft }: {
     setKept(raw);
   };
 
+  /**
+   * "Try an example" was pressed and its text is still here. Its questions are only for trying the page, so they aren't
+   * sent; once the text is emptied, pasted over or replaced, the same questions are the person's own (a chatbot's reply
+   * often has them).
+   */
+  const [example, setExample] = useState(false);
+  useEffect(() => { if (!raw.trim()) setExample(false); }, [raw]);
+  const fromExample = (r: Row) => example && EXAMPLE_QUESTIONS.has(r.question.toLowerCase());
+
   /** Replacing all the text can always be undone for a few seconds, so there is no "are you sure?". */
-  const replaceAll = (next: string, what: string) => {
+  const replaceAll = (next: string, what: string, isExample = false) => {
     const before = raw;
+    const wasExample = example;
     if (before.trim() && before !== next) {
       offer(what, () => {
         setRaw(before);
+        setExample(wasExample);
         setBatch((b) => b + 1);
         box.current?.focus({ preventScroll: true });
       });
     }
     setRaw(next);
+    setExample(isExample);
     setBatch((b) => b + 1);
   };
 
   // a sent-back question to fix, from the notifications (the text before it can be had back with Undo)
   useEffect(() => { if (draft) { replaceAll(draft.text, 'Question loaded'); setSent(null); } }, [draft?.n]);
 
-  /** Sends the questions to the HoD as one batch (not the example's). */
+  /** Sends the questions to the HoD (not the example's). A question needs a chapter ID and a chapter name to be sent. */
   const examples = rows.filter(fromExample).length;
-  const ready = rows.filter((r) => r.chapter_id && !fromExample(r)).length;
-  const noId = rows.filter((r) => !r.chapter_id && !fromExample(r)).length;
+  const own = rows.filter((r) => !fromExample(r));
+  const ready = own.filter((r) => r.chapter_id && r.chapter).length;
+  const noId = own.filter((r) => !r.chapter_id).length;
+  const noName = own.filter((r) => r.chapter_id && !r.chapter).length;
   // the text lives only on this page: closing or reloading it with questions not yet sent or downloaded asks first
-  const unsaved = ready + noId > 0 && raw !== kept;
+  const unsaved = own.length > 0 && raw !== kept;
   useEffect(() => {
     if (!unsaved) return;
     const ask = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
     addEventListener('beforeunload', ask);
     return () => removeEventListener('beforeunload', ask);
   }, [unsaved]);
+  useEffect(() => onUnsaved(unsaved ? own.length : 0), [unsaved, own.length, onUnsaved]);
   const send = async () => {
     setSending(true);
     setSent(null);
@@ -170,7 +186,7 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack, draft }: {
       <main className="page">
         <div className="intro enter">
           <h1>Question Formatter</h1>
-          <p>Write one question per line: the question, a bar <code>|</code>, then the answer. They come out as clean rows for the question bank, each linked to its chapter by an ID.</p>
+          <p>Write one question per line: the question, a bar <code>|</code>, then the answer. They come out as clean rows for the question bank, each linked to its chapter by an ID.<span className="narrow-only"> <button type="button" className="linkish" onClick={() => scrollToEl(document.getElementById('guide'))}>How to write your questions</button></span></p>
         </div>
 
         <div className="layout">
@@ -209,9 +225,9 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack, draft }: {
             </p>
 
             <label htmlFor="q">Questions</label>
-            <Editor value={raw} onChange={setRaw} onPaste={() => setBatch((b) => b + 1)} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} />
+            <Editor value={raw} onChange={setRaw} onPaste={(all) => { setBatch((b) => b + 1); if (all) setExample(false); }} onTyping={typedOn} issues={issues} boxRef={box} caret={caret} setCaret={moveCaret} />
             <div className="row">
-              <button type="button" className="btn quiet" onClick={() => replaceAll(EXAMPLE, 'Example loaded')}>Try an example</button>
+              <button type="button" className="btn quiet" onClick={() => replaceAll(EXAMPLE, 'Example loaded', true)}>Try an example</button>
               <button type="button" className="btn quiet" onClick={() => replaceAll('', 'Cleared')} disabled={!raw}>Clear</button>
             </div>
 
@@ -277,9 +293,10 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack, draft }: {
                 <p className="small muted">Sending as <b>{teacher}</b>.</p>
               </div>
               {noId > 0 && <p className="small muted">{plural(noId, 'question has', 'questions have')} no chapter ID and can't be sent yet. Fill in the boxes above.</p>}
+              {noName > 0 && <p className="small muted">{plural(noName, 'question has', 'questions have')} no chapter name and can't be sent yet. Write it after the chapter number, for example "3: Acids".</p>}
               {sent && (
                 <p className={`sent-note ${sent.sent ? 'ok' : 'warn'}`} key={JSON.stringify(sent)}>
-                  {sent.sent ? <>Sent {plural(sent.sent, 'question')} to the HoD as batch <b>{sent.batchId}</b>. </> : 'Nothing new to send. '}
+                  {sent.sent ? <>Sent {plural(sent.sent, 'question')} to the HoD as {sent.batchIds.length > 1 ? 'batches' : 'batch'} <b>{sent.batchIds.join(', ')}</b>. </> : 'Nothing new to send. '}
                   {sent.already > 0 && <>{plural(sent.already, 'question was', 'questions were')} already sent, so {sent.already === 1 ? 'it was' : 'they were'} skipped. </>}
                   {sent.sentBack > 0 && <>{plural(sent.sentBack, 'question was', 'questions were')} sent back to you before and {sent.sentBack === 1 ? "hasn't" : "haven't"} changed, so {sent.sentBack === 1 ? "it wasn't" : "they weren't"} sent again. <button type="button" className="linkish" onClick={() => onSentBack(sent.sentBackIds)}>See why</button> </>}
                   {reviewer && sent.sent > 0 && <Link className="linkish" href="/hod/">Open the HoD desk</Link>}
@@ -315,7 +332,8 @@ export function Formatter({ teacher, reviewer, onSent, onSentBack, draft }: {
 function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, setCaret }: {
   value: string;
   onChange: (v: string) => void;
-  onPaste: () => void;
+  /** A paste; `all` when it replaces all the text (or the box was empty). */
+  onPaste: (all: boolean) => void;
   /** The line just typed on (null when the box is left): problems there wait until the cursor moves on. */
   onTyping: (line: number | null) => void;
   issues: Issue[];
@@ -372,7 +390,7 @@ function Editor({ value, onChange, onPaste, onTyping, issues, boxRef, caret, set
             onChange(e.target.value);
             if (pasted.current) { pasted.current = false; onCaret(e.target); onTyping(null); } else onTyping(lineOf(e.target));
           }}
-          onPaste={() => { pasted.current = true; onPaste(); }}
+          onPaste={(e) => { pasted.current = true; const t = e.currentTarget; onPaste(t.selectionStart === 0 && t.selectionEnd === t.value.length); }}
           onFocus={(e) => onCaret(e.currentTarget)} onBlur={() => onTyping(null)}
           onScroll={sync} onSelect={(e) => onCaret(e.currentTarget)} onClick={(e) => onCaret(e.currentTarget)} onKeyUp={(e) => onCaret(e.currentTarget)}
           placeholder={'One question per line, like this:\n\nTopic 1: Chemical Equations\nQuestion | Answer\nQuestion | Answer | easy'} />

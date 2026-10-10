@@ -163,7 +163,7 @@ export function Link({ href, className, children, ...rest }: { href: string; cla
  */
 export function SectionHeader({ here, pages, waiting = 0, alerts = 0, name, avatar, left }: { here: Section; pages: Section[]; waiting?: number; alerts?: number; name: string; avatar: number; left?: ReactNode }) {
   return (
-    <header className="top">
+    <header className={`top${pages.length > 2 ? ' crowded' : ''}`}>
       <div className="top-in">
         <div className="top-left">
           <span className="brand"><Logo /><span className="brand-text">{SECTIONS.find((s) => s.key === here)!.name}</span></span>

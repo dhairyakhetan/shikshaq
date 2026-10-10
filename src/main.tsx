@@ -54,6 +54,7 @@ function App() {
   const showSentBack = useCallback((ids: string[]) => { setFocus({ ids, n: Date.now() }); go('/profile/'); }, []);
   /** "Fix in the formatter": puts a sent-back question, with its details, in the Questions box. */
   const [draft, setDraft] = useState<{ text: string; n: number } | null>(null);
+  const [unsent, setUnsent] = useState(0); // questions in the formatter not yet sent or downloaded: signing out warns first
   const fix = useCallback((a: SentBack) => { setDraft({ text: asText([a]), n: Date.now() }); go('/'); }, []);
 
   const pages: Section[] = role.role === 'admin' ? ['formatter', 'hod', 'play'] : reviewer ? ['formatter', 'hod'] : ['formatter'];
@@ -89,7 +90,7 @@ function App() {
     if (!unseen.length) return;
     setFresh((f) => new Set([...f, ...unseen]));
     setAlerts((a) => ({ ...a, list: a.list?.map((x) => ({ ...x, seen: true })) }));
-    markSentBackSeen().catch(() => {});
+    markSentBackSeen(unseen).catch(() => {});
   };
 
   if (session === undefined || (session && !role.role && !role.error)) return <div className="splash" aria-busy="true"><Logo /></div>;
@@ -110,11 +111,11 @@ function App() {
   }
 
   const parts: Record<Section, () => ReactNode> = {
-    formatter: () => <Formatter teacher={nameOf(session)} reviewer={reviewer} onSent={recount} onSentBack={showSentBack} draft={draft} />,
+    formatter: () => <Formatter teacher={nameOf(session)} reviewer={reviewer} onSent={recount} onSentBack={showSentBack} draft={draft} onUnsaved={setUnsent} />,
     hod: () => <HodDesk onWaiting={setWaiting} />,
     play: () => <Suspense fallback={<main className="page"><p className="empty">Loading the games…</p></main>}><Revise /></Suspense>,
     profile: () => <ProfilePage name={nameOf(session)} email={session.user.email ?? ''} role={role.role ?? 'member'} profile={profile} onChange={setProfile} onSignOut={() => signOut()}
-      alerts={alerts} fresh={fresh} focus={focus} active={onProfile} onSeen={seeAlerts} onRetry={() => setAlertsTry((n) => n + 1)} onFix={fix} />,
+      alerts={alerts} fresh={fresh} focus={focus} active={onProfile} onSeen={seeAlerts} onRetry={() => setAlertsTry((n) => n + 1)} onFix={fix} unsent={unsent} />,
   };
   return (
     <>

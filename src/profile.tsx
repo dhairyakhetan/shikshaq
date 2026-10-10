@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadPeople, removePerson, ROLE_NAMES, setPersonRole, type Person, type Role, type SentBack } from './db';
-import { Avatar, AVATAR_COUNT, avatarFor, BellIcon, SignOutIcon, useUndo } from './ui';
+import { Avatar, AVATAR_COUNT, avatarFor, BellIcon, Link, SignOutIcon, useUndo } from './ui';
 
 // ---------------------------------------------------------------- avatar and bio, on this device
 
@@ -44,12 +44,15 @@ type Focus = { ids: string[]; n: number } | null;
 /**
  * `alerts`: the notifications (no list while loading); `fresh`: the ones that were new; `focus`: opens the bell at these
  * questions; `active`: the profile is on screen; `onSeen`: the bell was opened; `onRetry`: load them again; `onFix`:
- * put a question back in the formatter.
+ * put a question back in the formatter; `unsent`: questions in the formatter not yet sent or downloaded, which signing out
+ * would lose (so it asks first).
  */
-export function ProfilePage({ name, email, role, profile, onChange, onSignOut, alerts, fresh, focus, active, onSeen, onRetry, onFix }: {
+export function ProfilePage({ name, email, role, profile, onChange, onSignOut, alerts, fresh, focus, active, onSeen, onRetry, onFix, unsent }: {
   name: string; email: string; role: Role; profile: Profile; onChange: (p: Partial<Profile>) => void; onSignOut: () => void;
-  alerts: Alerts; fresh: Set<string>; focus: Focus; active: boolean; onSeen: () => void; onRetry: () => void; onFix: (a: SentBack) => void;
+  alerts: Alerts; fresh: Set<string>; focus: Focus; active: boolean; onSeen: () => void; onRetry: () => void; onFix: (a: SentBack) => void; unsent: number;
 }) {
+  const [leaving, setLeaving] = useState(false); // "Sign out" was pressed with questions not yet sent
+  useEffect(() => { if (!unsent || !active) setLeaving(false); }, [unsent, active]);
   return (
     <main className="page profile">
       <section className="card stack enter me-card" aria-labelledby="me-h">
@@ -81,8 +84,16 @@ export function ProfilePage({ name, email, role, profile, onChange, onSignOut, a
             onChange={(e) => onChange({ bio: e.target.value })} />
         </div>
 
+        {leaving && (
+          <p className="sent-note warn" role="alert">
+            {unsent === 1 ? 'A question' : `${unsent} questions`} in the formatter {unsent === 1 ? "hasn't" : "haven't"} been sent or downloaded. Signing out clears {unsent === 1 ? 'it' : 'them'}.
+          </p>
+        )}
         <div className="row">
-          <button type="button" className="btn quiet" onClick={onSignOut}><SignOutIcon /> Sign out</button>
+          <button type="button" className={`btn ${leaving ? 'danger' : 'quiet'}`} onClick={() => (unsent && !leaving ? setLeaving(true) : onSignOut())}>
+            <SignOutIcon /> {leaving ? 'Sign out anyway' : 'Sign out'}
+          </button>
+          {leaving && <Link className="btn quiet" href="/">Go to the formatter</Link>}
         </div>
       </section>
 

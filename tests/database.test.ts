@@ -67,7 +67,7 @@ describe('who can read and call what', () => {
     refused(await anon(`insert into public.question_bank (question_id) values ('x')`), /permission denied/);
     refused(await anon('select private.role()'), /permission denied/);
     for (const f of ['my_role()', 'waiting_count()', 'hod_questions()', 'hod_approved()', `submit_batch('[]')`, `hod_set_status('{}', 'approved', '')`,
-      'my_sent_back()', 'mark_sent_back_seen()', 'admin_people()', `admin_set_role('a@b.in', 'hod')`, `admin_remove('a@b.in')`]) {
+      'my_sent_back()', 'mark_sent_back_seen()', `mark_sent_back_seen('{}')`, 'admin_people()', `admin_set_role('a@b.in', 'hod')`, `admin_remove('a@b.in')`]) {
       refused(await anon(`select public.${f}`), /permission denied/);
     }
   });
@@ -161,12 +161,17 @@ describe('sending questions', () => {
     refused(await send('ann@x.in', [Q('No chapter?', 'A', { chapter_id: null })]), /no chapter ID/);
   });
 
-  it('checks the chapter ID\'s codes against the board and subject', async () => {
-    for (const x of [{ subject: 'Mathematics' }, { subject: 'Scince' }, { board: 'ICSE' }, { chapter_id: 'cbse10sci01', topic_id: null, topic_no: null }]) {
+  it('takes only boards and subjects on the list, with their own codes in the chapter ID', async () => {
+    for (const x of [{ subject: 'Mathematics' }, { board: 'ICSE' }, { chapter_id: 'cbse10sci01', topic_id: null, topic_no: null }]) {
       refused(await send('ann@x.in', [Q('Code check?', 'A', x)]), /doesn't match/);
     }
-    expect((await send('ann@x.in', [Q('Made-up subject?', 'Fine', { subject: 'Robotix', chapter_id: 'CBSE10ROB01' })])).error).toBeUndefined();
-    expect((await send('ann@x.in', [Q('Made-up board?', 'Fine', { board: 'Dps Board', chapter_id: 'DPSB10SCI01' })])).error).toBeUndefined();
+    refused(await send('ann@x.in', [Q('Typo?', 'A', { subject: 'Scince' })]), /subject "Scince" isn't on the site's list/);
+    refused(await send('ann@x.in', [Q('Made-up subject?', 'No', { subject: 'Robotix', chapter_id: 'CBSE10ROB01' })]), /subject "Robotix" isn't on the site's list/);
+    refused(await send('ann@x.in', [Q('Made-up board?', 'No', { board: 'Dps Board', chapter_id: 'DPSB10SCI01' })]), /board "Dps Board" isn't on the site's list/);
+    refused(await send('ann@x.in', [Q('A board under a real board\'s code?', 'No', { board: 'Indian Baccalaureate', chapter_id: 'IB10SCI01' })]), /isn't on the site's list/);
+    for (const x of [{ board: 'Maharashtra State Board', chapter_id: 'MH10SCI01' }, { board: 'cbse', subject: 'science' }, { subject: 'Robotics', chapter_id: 'CBSE10ROB01' }]) {
+      expect((await send('ann@x.in', [Q(`On the list: ${x.board ?? x.subject}?`, 'Yes', { topic_id: null, ...x })])).error, JSON.stringify(x)).toBeUndefined();
+    }
   });
 
   it('works out each topic ID itself, and keeps to the limits', async () => {
@@ -231,6 +236,17 @@ describe('the HoD desk, notifications and the question bank', () => {
     expect((await notes('ann@x.in'))[0].seen).toBe(false);
     await value('ann@x.in', 'select public.mark_sent_back_seen()');
     expect((await notes('ann@x.in'))[0].seen).toBe(true);
+  });
+
+  it('marks seen only the notifications the bell showed', async () => {
+    const [shown, later] = (await sent('fay@x.in', [Q('Shown in the bell?', 'Yes'), Q('Sent back while the bell was open?', 'Yes')])).question_ids;
+    await decide('hod@x.in', [shown, later], 'rejected', 'Check it.');
+    await value('fay@x.in', 'select public.mark_sent_back_seen($1::text[])', [[shown]]);
+    const seen = Object.fromEntries((await notes('fay@x.in')).map((n: Json) => [n.question_id, n.seen]));
+    expect(seen).toEqual({ [shown]: true, [later]: false });
+    await value('fay@x.in', 'select public.mark_sent_back_seen($1::text[])', [[later, 'NOT-MINE']]);
+    expect((await notes('fay@x.in')).every((n: Json) => n.seen)).toBe(true);
+    expect(await count(`public.questions where question_id = '${shown}' and status = 'rejected'`)).toBe(1); // nothing else changed
   });
 
   it('sent back to you, unchanged: not sent again; sent back to someone else: sent as new', async () => {
